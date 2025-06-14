@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from logging.handlers import RotatingFileHandler
 
 from aiogram import Dispatcher
@@ -10,13 +11,25 @@ from handlers.common import router as common_router
 from handlers.sprint_actions import router as sprint_router
 from services import bot
 
+LOG_DIR = "logs"
+LOG_FILE = os.path.join(LOG_DIR, "bot.log")
+LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
+
+os.makedirs(LOG_DIR, exist_ok=True)
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-LOG_FILE = "logs/bot.log"
-handler = RotatingFileHandler(LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=3)
-handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-logger.addHandler(handler)
-logging.basicConfig(level=logging.WARNING)
+
+file_handler = RotatingFileHandler(LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=3)
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
+
+stream_handler = logging.StreamHandler()
+stream_handler.setLevel(logging.WARNING)
+stream_handler.setFormatter(logging.Formatter(LOG_FORMAT))
+
+logger.addHandler(file_handler)
+logger.addHandler(stream_handler)
 
 
 def setup_dispatcher() -> Dispatcher:
