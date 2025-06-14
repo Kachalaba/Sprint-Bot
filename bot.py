@@ -1,6 +1,7 @@
 import os, json, math, asyncio
 from datetime import datetime, timezone
 import gspread
+from dotenv import load_dotenv
 from google.oauth2.service_account import Credentials
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.client.default import DefaultBotProperties
@@ -12,12 +13,13 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 
 # ───────────────────────── CONFIG ──────────────────────────
-API_TOKEN = os.getenv("SPRINT_BOT_TOKEN")
+load_dotenv()
+API_TOKEN = os.getenv("BOT_TOKEN")
 if not API_TOKEN:
-    raise SystemExit("⛔ Переменная SPRINT_BOT_TOKEN не задана. См. run_bot.bat")
-ADMIN_IDS = {597164575}
-CREDENTIALS_FILE = "creds.json"  # JSON‑ключ сервис‑аккаунта
-SPREADSHEET_KEY = "1NA-BcyS4QQjMdnDi-jxM91qDIvwj43Z50bsjRph2UtU"
+    raise SystemExit("⛔ Переменная BOT_TOKEN не задана. См. .env.example")
+ADMIN_IDS = {int(x) for x in os.getenv("ADMIN_IDS", "597164575").split(',') if x}
+CREDENTIALS_FILE = os.getenv("CREDENTIALS_FILE", "creds.json")  # JSON‑ключ сервис‑аккаунта
+SPREADSHEET_KEY = os.getenv("SPREADSHEET_KEY", "1NA-BcyS4QQjMdnDi-jxM91qDIvwj43Z50bsjRph2UtU")
 
 # ───────────────────── GOOGLE SHEETS ───────────────────────
 if not os.path.exists(CREDENTIALS_FILE):

@@ -29,7 +29,7 @@ Sprint-Bot — Telegram-бот на основе **Python** и **aiogram 3**, п
    ```bash
    pip install -r requirements.txt
    ```
-4. Скопируйте файл `.env.example` в `.env` и задайте переменную `SPRINT_BOT_TOKEN` со значением токена вашего бота.
+4. Скопируйте файл `.env.example` в `.env` и задайте переменную `BOT_TOKEN` со значением токена вашего бота.
 5. Запустите бот:
    ```bash
    python bot.py
