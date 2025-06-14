@@ -55,18 +55,23 @@ async def collect(message: types.Message, state: FSMContext) -> None:
     total = sum(splits)
     stroke = "freestyle"
     now = datetime.now(timezone.utc).isoformat(sep=" ", timespec="seconds")
-    ws_results.append_row(
-        [
-            athlete_id,
-            message.from_user.full_name,
-            stroke,
-            dist,
-            now,
-            json.dumps(splits),
-            total,
-        ]
-    )
-    ws_log.append_row([athlete_id, now, "ADD", json.dumps(splits)])
+    try:
+        ws_results.append_row(
+            [
+                athlete_id,
+                message.from_user.full_name,
+                stroke,
+                dist,
+                now,
+                json.dumps(splits),
+                total,
+            ]
+        )
+        ws_log.append_row([athlete_id, now, "ADD", json.dumps(splits)])
+    except Exception:
+        return await message.answer(
+            "Ошибка при сохранении результата. Попробуйте позже."
+        )
     new_prs = []
     for i, seg_time in enumerate(splits):
         key = pr_key(message.from_user.id, stroke, dist, i)
@@ -159,7 +164,12 @@ async def admin(cb: types.CallbackQuery) -> None:
 @router.callback_query(F.data == "menu_sprint")
 async def menu_sprint(cb: types.CallbackQuery, state: FSMContext) -> None:
     """Show list of athletes for result entry."""
-    records = ws_athletes.get_all_records()
+    try:
+        records = ws_athletes.get_all_records()
+    except Exception:
+        return await cb.message.answer(
+            "Ошибка: не удалось получить список спортсменов. Попробуйте позже."
+        )
     kb = InlineKeyboardMarkup(row_width=2)
     for rec in records:
         athlete_id = rec["ID"]
@@ -176,7 +186,10 @@ async def menu_sprint(cb: types.CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(F.data.startswith("select_"))
 async def select_athlete(cb: types.CallbackQuery, state: FSMContext) -> None:
     """Save selected athlete and ask for distance."""
-    athlete_id = int(cb.data.split("_", 1)[1])
+    try:
+        athlete_id = int(cb.data.split("_", 1)[1])
+    except ValueError:
+        return await cb.message.answer("Ошибка: ID спортсмена должен быть числом.")
     await state.update_data(athlete_id=athlete_id)
     await cb.message.answer("Введите дистанцию (50/100/200/400/800/1500):")
     await state.set_state(AddResult.choose_dist)
