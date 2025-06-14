@@ -61,4 +61,5 @@ class AddResult(StatesGroup):
 
     choose_athlete = State()
     choose_dist = State()
+    waiting_for_stroke = State()
     collect = State()
