@@ -7,6 +7,7 @@ from aiogram import F, Router, types
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from keyboards import StrokeCB, get_stroke_keyboard
 from services import ADMIN_IDS, ws_athletes, ws_log, ws_pr, ws_results
 from utils import AddResult, fmt_time, get_segments, parse_time, pr_key, speed
 
@@ -30,8 +31,20 @@ async def dist_chosen(message: types.Message, state: FSMContext) -> None:
     except ValueError:
         return await message.reply("❗ Невірна дистанція. Спробуй ще.")
     await state.update_data(dist=dist, splits=[], idx=0)
+    await message.answer("Выберите стиль плавания:", reply_markup=get_stroke_keyboard())
+    await state.set_state(AddResult.waiting_for_stroke)
+
+
+@router.callback_query(StrokeCB.filter())
+async def stroke_chosen(
+    cb: types.CallbackQuery, callback_data: StrokeCB, state: FSMContext
+) -> None:
+    """Save stroke and ask for first split."""
+    await state.update_data(stroke=callback_data.stroke)
+    data = await state.get_data()
+    dist = data["dist"]
     segs = get_segments(dist)
-    await message.answer(f"Дистанція {dist} м. Час сегмента #1 ({segs[0]} м):")
+    await cb.message.answer(f"Дистанція {dist} м. Час сегмента #1 ({segs[0]} м):")
     await state.set_state(AddResult.collect)
 
 
@@ -53,7 +66,7 @@ async def collect(message: types.Message, state: FSMContext) -> None:
         return
     await state.clear()
     total = sum(splits)
-    stroke = "freestyle"
+    stroke = data.get("stroke", "freestyle")
     now = datetime.now(timezone.utc).isoformat(sep=" ", timespec="seconds")
     try:
         ws_results.append_row(
