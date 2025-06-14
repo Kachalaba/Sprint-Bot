@@ -42,13 +42,16 @@ async def cmd_reg(message: types.Message) -> None:
 async def reg_contact(message: types.Message) -> None:
     """Save athlete contact."""
     contact = message.contact
-    ws_athletes.append_row(
-        [
-            contact.user_id,
-            contact.first_name or "",
-            datetime.now(timezone.utc).isoformat(" ", "seconds"),
-        ]
-    )
+    try:
+        ws_athletes.append_row(
+            [
+                contact.user_id,
+                contact.first_name or "",
+                datetime.now(timezone.utc).isoformat(" ", "seconds"),
+            ]
+        )
+    except Exception:
+        return await message.answer("Ошибка при сохранении контакта. Попробуйте позже.")
     await message.answer(
         f"✅ Спортсмен {contact.first_name} зареєстрированный.",
         reply_markup=start_kb,
