@@ -8,6 +8,7 @@ from logging.handlers import RotatingFileHandler
 from aiogram import Dispatcher
 
 from handlers.common import router as common_router
+from handlers.error_handler import router as error_router
 from handlers.sprint_actions import router as sprint_router
 from services import bot
 
@@ -37,6 +38,7 @@ def setup_dispatcher() -> Dispatcher:
     dp = Dispatcher()
     dp.include_router(common_router)
     dp.include_router(sprint_router)
+    dp.include_router(error_router)
     return dp
 
 
