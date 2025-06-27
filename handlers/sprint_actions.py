@@ -17,7 +17,7 @@ router = Router()
 @router.callback_query(F.data == "add")
 async def add(cb: types.CallbackQuery, state: FSMContext) -> None:
     """Start collecting sprint result."""
-    await cb.message.answer("Введи дистанцію (50/100/200/400/800/1500):")
+    await cb.message.answer("Введи дистанцию (50/100/200/400/800/1500):")
     await state.set_state(AddResult.choose_dist)
 
 
@@ -29,7 +29,7 @@ async def dist_chosen(message: types.Message, state: FSMContext) -> None:
         if dist not in {50, 100, 200, 400, 800, 1500}:
             raise ValueError
     except ValueError:
-        return await message.reply("❗ Невірна дистанція. Спробуй ще.")
+        return await message.reply("❗ Неверная дистанция. Попробуй ещё.")
     await state.update_data(dist=dist, splits=[], idx=0)
     await message.answer("Выберите стиль плавания:", reply_markup=get_stroke_keyboard())
     await state.set_state(AddResult.waiting_for_stroke)
@@ -44,7 +44,7 @@ async def stroke_chosen(
     data = await state.get_data()
     dist = data["dist"]
     segs = get_segments(dist)
-    await cb.message.answer(f"Дистанція {dist} м. Час сегмента #1 ({segs[0]} м):")
+    await cb.message.answer(f"Дистанция {dist} м. Время отрезка #1 ({segs[0]} м):")
     await state.set_state(AddResult.collect)
 
 
@@ -58,11 +58,11 @@ async def collect(message: types.Message, state: FSMContext) -> None:
     try:
         t = parse_time(message.text)
     except Exception:
-        return await message.reply("❗ Формат 0:32.45 або 32.45")
+        return await message.reply("❗ Формат 0:32.45 или 32.45")
     splits.append(t)
     if idx + 1 < len(segs):
         await state.update_data(idx=idx + 1, splits=splits)
-        await message.answer(f"Час сегмента #{idx + 2} ({segs[idx + 1]} м):")
+        await message.answer(f"Время отрезка #{idx + 2} ({segs[idx + 1]} м):")
         return
     await state.clear()
     total = sum(splits)
@@ -98,12 +98,12 @@ async def collect(message: types.Message, state: FSMContext) -> None:
                 ws_pr.update_row(cell.row, [key, seg_time, now])
                 new_prs.append((i, seg_time))
     txt = (
-        f"✅ Збережено! Загальний час <b>{fmt_time(total)}</b>\n"
-        f"Середня швидкість {speed(dist, total):.2f} м/с"
+        f"✅ Сохранено! Общее время <b>{fmt_time(total)}</b>\n"
+        f"Средняя скорость {speed(dist, total):.2f} м/с"
     )
     if new_prs:
         txt += "\n" + "\n".join(
-            f"🥳 Новий PR сег #{i+1}: {fmt_time(t)}" for i, t in new_prs
+            f"🥳 Новый PR сег #{i+1}: {fmt_time(t)}" for i, t in new_prs
         )
     await message.answer(txt)
     seg_lens = get_segments(dist)
@@ -114,13 +114,11 @@ async def collect(message: types.Message, state: FSMContext) -> None:
         (speeds[0] - speeds[-1]) / speeds[0] * 100 if speeds and speeds[0] else 0
     )
     analysis_text = (
-        "📊 <b>Аналіз результату</b>\n"
-        f"• Швидкості по сегментам: "
-        + " • ".join(f"{v:.2f} м/с" for v in speeds)
-        + "\n"
-        f"• Середня швидкість: {avg_speed:.2f} м/с\n"
+        "📊 <b>Анализ результата</b>\n"
+        f"• Скорости по сегментам: " + " • ".join(f"{v:.2f} м/с" for v in speeds) + "\n"
+        f"• Средняя скорость: {avg_speed:.2f} м/с\n"
         f"• Темп: {pace:.1f} сек/100 м\n"
-        f"• Деградація темпу: {degradation:.1f}%"
+        f"• Деградация темпа: {degradation:.1f}%"
     )
     await message.answer(analysis_text)
 
@@ -142,7 +140,7 @@ async def history(cb: types.CallbackQuery) -> None:
                 )
             if len(out) >= 30:
                 break
-    await cb.message.answer("\n".join(out) if out else "Поки історія пуста.")
+    await cb.message.answer("\n".join(out) if out else "Пока история пуста.")
 
 
 @router.callback_query(F.data == "records")
@@ -155,12 +153,12 @@ async def records(cb: types.CallbackQuery) -> None:
         if int(uid) == cb.from_user.id:
             best.setdefault(dist, []).append(float(row[1].replace(",", ".")))
     if not best:
-        return await cb.message.answer("Ще нема рекордів.")
+        return await cb.message.answer("Пока нет рекордов.")
     lines = []
     for dist, arr in best.items():
         total = sum(arr)
         lines.append(
-            f"🏅 {dist} м → {fmt_time(total)} (сума кращих)\n"
+            f"🏅 {dist} м → {fmt_time(total)} (сумма лучших)\n"
             + " • ".join(fmt_time(t) for t in arr)
         )
     await cb.message.answer("\n\n".join(lines))
@@ -171,7 +169,7 @@ async def admin(cb: types.CallbackQuery) -> None:
     """Admin placeholder."""
     if cb.from_user.id not in ADMIN_IDS:
         return
-    await cb.message.answer("Адмін‑панель у процесі. Дані видно у Google Sheets.")
+    await cb.message.answer("Админ‑панель в процессе. Данные видны в Google Sheets.")
 
 
 @router.callback_query(F.data == "menu_sprint")

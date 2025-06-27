@@ -53,7 +53,7 @@ async def reg_contact(message: types.Message) -> None:
     except Exception:
         return await message.answer("Ошибка при сохранении контакта. Попробуйте позже.")
     await message.answer(
-        f"✅ Спортсмен {contact.first_name} зареєстрированный.",
+        f"✅ Спортсмен {contact.first_name} зарегистрирован.",
         reply_markup=start_kb,
     )
 
