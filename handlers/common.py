@@ -20,22 +20,22 @@ start_kb = ReplyKeyboardMarkup(
         [
             KeyboardButton(text="Старт"),
         ],
-        [KeyboardButton(text="Регистрация")],
+        [KeyboardButton(text="Реєстрація")],
     ],
     resize_keyboard=True,
 )
 
 
 @router.message(Command("reg"))
-@router.message(lambda m: m.text == "Регистрация")
+@router.message(lambda m: m.text == "Реєстрація")
 async def cmd_reg(message: types.Message) -> None:
     """Request athlete contact."""
     kb = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="Перешлите контакт", request_contact=True)]],
+        keyboard=[[KeyboardButton(text="Надішліть контакт", request_contact=True)]],
         resize_keyboard=True,
         one_time_keyboard=True,
     )
-    await message.answer("Перешлите контакт спортсмена:", reply_markup=kb)
+    await message.answer("Надішліть контакт спортсмена:", reply_markup=kb)
 
 
 @router.message(lambda m: m.contact is not None)
@@ -51,9 +51,11 @@ async def reg_contact(message: types.Message) -> None:
             ]
         )
     except Exception:
-        return await message.answer("Ошибка при сохранении контакта. Попробуйте позже.")
+        return await message.answer(
+            "Помилка при збереженні контакту. Спробуйте пізніше."
+        )
     await message.answer(
-        f"✅ Спортсмен {contact.first_name} зарегистрирован.",
+        f"✅ Спортсмен {contact.first_name} зареєстрований.",
         reply_markup=start_kb,
     )
 
@@ -65,14 +67,14 @@ async def cmd_start(message: types.Message) -> None:
     inline_kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="Спринт", callback_data="menu_sprint")],
-            [InlineKeyboardButton(text="Стаер", callback_data="menu_stayer")],
-            [InlineKeyboardButton(text="История", callback_data="menu_history")],
-            [InlineKeyboardButton(text="Рекорды", callback_data="menu_records")],
+            [InlineKeyboardButton(text="Стаєр", callback_data="menu_stayer")],
+            [InlineKeyboardButton(text="Історія", callback_data="menu_history")],
+            [InlineKeyboardButton(text="Рекорди", callback_data="menu_records")],
             *(
-                [[InlineKeyboardButton(text="Admin", callback_data="menu_admin")]]
+                [[InlineKeyboardButton(text="Адмін", callback_data="menu_admin")]]
                 if message.from_user.id in ADMIN_IDS
                 else []
             ),
         ]
     )
-    await message.answer("Выбери раздел:", reply_markup=inline_kb)
+    await message.answer("Оберіть розділ:", reply_markup=inline_kb)
