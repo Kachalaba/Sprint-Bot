@@ -122,7 +122,7 @@ async def collect(message: types.Message, state: FSMContext) -> None:
         f"• Темп: {pace:.1f} сек/100 м\n"
         f"• Деградація темпу: {degradation:.1f}%"
     )
-    await message.answer(analysis_text)
+ await message.answer(analysis_text)
 
 
 @router.callback_query(F.data == "history")
@@ -148,7 +148,24 @@ async def history(cb: types.CallbackQuery) -> None:
 @router.callback_query(F.data == "records")
 async def records(cb: types.CallbackQuery) -> None:
     """Display personal records."""
-    rows = ws_pr.get_all_values()
+@router.callback_query(F.data == "history")
+async def history(cb: types.CallbackQuery) -> None:
+    """Show history of results for user."""
+    rows = ws_results.get_all_values()[::-1]
+    out = []
+    for row in rows:
+        if row and str(row[0]) == str(cb.from_user.id):
+            dist = int(row[3])
+            splits = json.loads(row[5])
+            date = row[4]
+            for i, t in enumerate(splits):
+                out.append(
+                    f"{date} | {dist} м seg#{i+1}: {fmt_time(float(t))} ("
+                    f"{speed(get_segments(dist)[i], float(t)):.2f} м/с)"
+                )
+            if len(out) >= 30:
+                break
+    await cb.message.answer("\n".join(out) if out else "Історія поки порожня.")    rows = ws_pr.get_all_values()
     best = {}
     for row in rows:
         uid, _, dist@router.callback_query(F.data == "history")
