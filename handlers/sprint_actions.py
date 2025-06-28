@@ -249,7 +249,7 @@ async def menu_history(cb: types.CallbackQuery) -> None:
     await history(cb)
 
 
-@router.callback__query(F.data == "menu_records")
+@router.callback_query(F.data == "menu_records")
 async def menu_records(cb: types.CallbackQuery) -> None:
     """Menu alias for records."""
     await records(cb)
