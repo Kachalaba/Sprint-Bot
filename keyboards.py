@@ -47,3 +47,18 @@ def get_history_keyboard() -> InlineKeyboardMarkup:
             ]
         ]
     )
+
+def get_sportsmen_keyboard(sportsmen: list) -> InlineKeyboardMarkup:
+    """Gets keyboard with sportsmen names."""
+    buttons = [
+        InlineKeyboardButton(text=name, callback_data=name) for name in sportsmen
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=[buttons])
+
+
+def get_distance_keyboard(distances: list) -> InlineKeyboardMarkup:
+    """Gets keyboard with distances."""
+    buttons = [
+        InlineKeyboardButton(text=f"{dist} м", callback_data=dist) for dist in distances
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=[buttons])
