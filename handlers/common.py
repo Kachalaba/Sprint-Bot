@@ -4,13 +4,9 @@ from datetime import datetime, timezone
 
 from aiogram import Router, types
 from aiogram.filters import Command
-from aiogram.types import (
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    KeyboardButton,
-    ReplyKeyboardMarkup,
-)
+from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
+from keyboards import get_main_keyboard
 from services import ADMIN_IDS, ws_athletes
 
 router = Router()
@@ -64,17 +60,7 @@ async def reg_contact(message: types.Message) -> None:
 @router.message(lambda m: m.text == "Старт")
 async def cmd_start(message: types.Message) -> None:
     """Show main menu."""
-    inline_kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="Спринт", callback_data="menu_sprint")],
-            [InlineKeyboardButton(text="Стаєр", callback_data="menu_stayer")],
-            [InlineKeyboardButton(text="Історія", callback_data="menu_history")],
-            [InlineKeyboardButton(text="Рекорди", callback_data="menu_records")],
-            *(
-                [[InlineKeyboardButton(text="Адмін", callback_data="menu_admin")]]
-                if message.from_user.id in ADMIN_IDS
-                else []
-            ),
-        ]
+    is_admin = str(message.from_user.id) in ADMIN_IDS
+    await message.answer(
+        "Оберіть розділ:", reply_markup=get_main_keyboard(is_admin=is_admin)
     )
-    await message.answer("Оберіть розділ:", reply_markup=inline_kb)

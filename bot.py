@@ -9,6 +9,7 @@ from aiogram import Dispatcher
 
 from handlers.common import router as common_router
 from handlers.error_handler import router as error_router
+from handlers.registration import router as registration_router
 from handlers.sprint_actions import router as sprint_router
 from services import bot
 
@@ -36,6 +37,7 @@ logger.addHandler(stream_handler)
 def setup_dispatcher() -> Dispatcher:
     """Configure dispatcher with routers."""
     dp = Dispatcher()
+    dp.include_router(registration_router)
     dp.include_router(common_router)
     dp.include_router(sprint_router)
     dp.include_router(error_router)
