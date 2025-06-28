@@ -8,45 +8,64 @@ from aiogram.types import (
 
 # --- CallbackData Factories ---
 
+
 class StrokeCB(CallbackData, prefix="stroke"):
     stroke: str
+
 
 # --- Reply Keyboards ---
 
 main_keyboard = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="Додати результат ➕")],
-        [KeyboardButton(text="Мої результати 🏆"), KeyboardButton(text="Особисті рекорди 🥇")],
+        [
+            KeyboardButton(text="Мої результати 🏆"),
+            KeyboardButton(text="Особисті рекорди 🥇"),
+        ],
     ],
     resize_keyboard=True,
 )
 
 # --- Inline Keyboards ---
 
+
 def get_stroke_keyboard() -> InlineKeyboardMarkup:
     """Get keyboard for choosing swim stroke."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="🏊‍♂️ Кроль", callback_data=StrokeCB(stroke="freestyle").pack()),
-                InlineKeyboardButton(text="🏊‍♀️ Спина", callback_data=StrokeCB(stroke="backstroke").pack()),
+                InlineKeyboardButton(
+                    text="🏊‍♂️ Кроль", callback_data=StrokeCB(stroke="freestyle").pack()
+                ),
+                InlineKeyboardButton(
+                    text="🏊‍♀️ Спина", callback_data=StrokeCB(stroke="backstroke").pack()
+                ),
             ],
             [
-                InlineKeyboardButton(text="🦋 Батерфляй", callback_data=StrokeCB(stroke="butterfly").pack()),
-                InlineKeyboardButton(text="🐸 Брас", callback_data=StrokeCB(stroke="breaststroke").pack()),
+                InlineKeyboardButton(
+                    text="🦋 Батерфляй",
+                    callback_data=StrokeCB(stroke="butterfly").pack(),
+                ),
+                InlineKeyboardButton(
+                    text="🐸 Брас", callback_data=StrokeCB(stroke="breaststroke").pack()
+                ),
             ],
         ]
     )
+
 
 def get_history_keyboard() -> InlineKeyboardMarkup:
     """Get keyboard with a button to show detailed history."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="📜 Показати детальну історію", callback_data="history")
+                InlineKeyboardButton(
+                    text="📜 Показати детальну історію", callback_data="history"
+                )
             ]
         ]
     )
+
 
 def get_sportsmen_keyboard(sportsmen: list) -> InlineKeyboardMarkup:
     """Gets keyboard with sportsmen names."""
@@ -62,3 +81,23 @@ def get_distance_keyboard(distances: list) -> InlineKeyboardMarkup:
         InlineKeyboardButton(text=f"{dist} м", callback_data=dist) for dist in distances
     ]
     return InlineKeyboardMarkup(inline_keyboard=[buttons])
+
+
+def get_main_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
+    """Return main menu keyboard with optional admin buttons."""
+    buttons = [
+        [InlineKeyboardButton(text="Спринт", callback_data="menu_sprint")],
+        [InlineKeyboardButton(text="Стаєр", callback_data="menu_stayer")],
+        [InlineKeyboardButton(text="Історія", callback_data="menu_history")],
+        [InlineKeyboardButton(text="Рекорди", callback_data="menu_records")],
+    ]
+    if is_admin:
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text="➕ Запросити спортсмена", callback_data="invite"
+                )
+            ]
+        )
+        buttons.append([InlineKeyboardButton(text="Адмін", callback_data="menu_admin")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
