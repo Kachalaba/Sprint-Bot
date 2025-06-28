@@ -9,7 +9,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from keyboards import StrokeCB, get_stroke_keyboard, get_history_keyboard
-from services.google_sheets import ADMIN_IDS, ws_athletes, ws_log, ws_pr, ws_results
+from services import ADMIN_IDS, ws_athletes, ws_log, ws_pr, ws_results
 from utils import AddResult, fmt_time, get_segments, parse_time, pr_key, speed
 
 router = Router()
