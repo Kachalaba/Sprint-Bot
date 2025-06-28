@@ -53,7 +53,7 @@ async def stroke_chosen(
 async def collect(message: types.Message, state: FSMContext) -> None:
     """Collect segment times and save result."""
     data = await state.get_data()
-    athlete_id = data.get("athlete_id")
+    athlete_id = data.get("athlete_id", message.from_user.id) # Default to self if no athlete selected
     dist, idx, splits = data["dist"], data["idx"], data["splits"]
     segs = get_segments(dist)
     try:
@@ -82,21 +82,21 @@ async def collect(message: types.Message, state: FSMContext) -> None:
             ]
         )
         ws_log.append_row([athlete_id, now, "ADD", json.dumps(splits)])
-    except Exception:
+    except Exception as e:
+        logging.error(f"Failed to save result to Google Sheets: {e}")
         return await message.answer(
             "Помилка при збереженні результату. Спробуйте пізніше."
         )
     new_prs = []
     for i, seg_time in enumerate(splits):
-        key = pr_key(message.from_user.id, stroke, dist, i)
-        cell = ws_pr.find(key) if ws_pr.findall(key) else None
+        key = pr_key(athlete_id, stroke, dist, i)
+        cell = ws_pr.find(key)
         if not cell:
             ws_pr.append_row([key, seg_time, now])
             new_prs.append((i, seg_time))
         else:
             old = float(ws_pr.cell(cell.row, 2).value.replace(",", "."))
             if seg_time < old:
-                # --- ИСПРАВЛЕННАЯ СТРОКА ---
                 ws_pr.update(f'A{cell.row}:C{cell.row}', [[key, seg_time, now]])
                 new_prs.append((i, seg_time))
     txt = (
@@ -108,12 +108,14 @@ async def collect(message: types.Message, state: FSMContext) -> None:
             f"🥳 Новий PR сегменту #{i+1}: {fmt_time(t)}" for i, t in new_prs
         )
     await message.answer(txt, parse_mode="HTML")
+    
+    # Analysis part
     seg_lens = get_segments(dist)
     speeds = [speed(seg, t) for seg, t in zip(seg_lens, splits)]
     avg_speed = speed(dist, total)
-    pace = total / dist * 100
+    pace = total / dist * 100 if dist > 0 else 0
     degradation = (
-        (speeds[0] - speeds[-1]) / speeds[0] * 100 if speeds and speeds[0] else 0
+        (speeds[0] - speeds[-1]) / speeds[0] * 100 if len(speeds) > 1 and speeds[0] else 0
     )
     analysis_text = (
         "📊 <b>Аналіз результату</b>\n"
@@ -181,7 +183,8 @@ async def records(cb: types.CallbackQuery) -> None:
         try:
             uid, _, dist, _ = row[0].split("|")
             if int(uid) == cb.from_user.id:
-                best.setdefault(dist, []).append(float(row[1].replace(",", ".")))
+                dist_key = int(dist)
+                best.setdefault(dist_key, []).append(float(row[1].replace(",", ".")))
         except (ValueError, IndexError):
             continue
 
@@ -201,7 +204,7 @@ async def records(cb: types.CallbackQuery) -> None:
 @router.callback_query(F.data == "admin")
 async def admin(cb: types.CallbackQuery) -> None:
     """Admin placeholder."""
-    if cb.from_user.id not in ADMIN_IDS:
+    if str(cb.from_user.id) not in ADMIN_IDS:
         return
     await cb.message.answer("Адмін‑панель у процесі. Дані видно в Google Sheets.")
 
@@ -211,7 +214,8 @@ async def menu_sprint(cb: types.CallbackQuery, state: FSMContext) -> None:
     """Show list of athletes for result entry."""
     try:
         records = ws_athletes.get_all_records()
-    except Exception:
+    except Exception as e:
+        logging.error(f"Failed to get athletes list: {e}")
         return await cb.message.answer(
             "Помилка: не вдалося отримати список спортсменів. Спробуйте пізніше."
         )
