@@ -1,54 +1,52 @@
-from __future__ import annotations
-
+import logging
 import os
-from datetime import datetime, timezone
+from functools import lru_cache
 
 import gspread
 from aiogram import Bot
-from aiogram.client.default import DefaultBotProperties
 from dotenv import load_dotenv
-from google.oauth2.service_account import Credentials
 
+# --- Environment setup ---
 load_dotenv()
+logging.basicConfig(level=logging.INFO)
 
-API_TOKEN = os.getenv("BOT_TOKEN")
-if not API_TOKEN:
-    raise SystemExit("⛔ Переменная BOT_TOKEN не задана. См. .env.example")
+# --- Bot Initialization ---
+TOKEN = os.getenv("BOT_TOKEN")
+if not TOKEN:
+    raise ValueError("BOT_TOKEN must be set in .env file")
+bot = Bot(token=TOKEN, parse_mode="HTML")
 
-ADMIN_IDS = {int(x) for x in os.getenv("ADMIN_IDS", "597164575").split(",") if x}
 
-CREDENTIALS_FILE = os.getenv("CREDENTIALS_FILE", "creds.json")
-SPREADSHEET_KEY = os.getenv(
-    "SPREADSHEET_KEY", "1NA-BcyS4QQjMdnDi-jxM91qDIvwj43Z50bsjRph2UtU"
-)
-
-if not os.path.exists(CREDENTIALS_FILE):
-    raise SystemExit(f"⛔ Не найден {CREDENTIALS_FILE}. Помести JSON рядом с bot.py")
-
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive.file",
-]
-creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=SCOPES)
-client = gspread.authorize(creds)
+# --- Google Sheets Setup ---
 try:
-    book = client.open_by_key(SPREADSHEET_KEY)
-except Exception as exc:
-    raise SystemExit(
-        "⛔ Таблица с таким ключом не найдена или нет доступа. Проверь Share."
-    ) from exc
+    gc = gspread.service_account(filename="creds.json")
+    sh = gc.open_by_key(os.getenv("SPREADSHEET_KEY"))
 
-sheet_titles = {ws.title for ws in book.worksheets()}
-for title in ("ATHLETES", "PR", "LOG"):
-    if title not in sheet_titles:
-        book.add_worksheet(title, rows="1000", cols="10")
+    # Assign worksheets to variables
+    ws_results = sh.worksheet("results")
+    ws_pr = sh.worksheet("pr")
+    ws_log = sh.worksheet("log")
+    ws_athletes = sh.worksheet("AthletesList") # Corrected worksheet name
 
-ws_results = book.worksheet("ATHLETES")
-ws_pr = book.worksheet("PR")
-ws_log = book.worksheet("LOG")
+except gspread.exceptions.SpreadsheetNotFound:
+    logging.error("Spreadsheet not found. Check SPREADSHEET_KEY in .env file.")
+    raise
+except gspread.exceptions.WorksheetNotFound as e:
+    logging.error(f"Worksheet not found: {e}. Make sure all worksheets (results, pr, log, AthletesList) exist.")
+    raise
+except Exception as e:
+    logging.error(f"An error occurred during Google Sheets initialization: {e}")
+    raise
 
-if "AthletesList" not in sheet_titles:
-    book.add_worksheet("AthletesList", rows="1000", cols="3")
-ws_athletes = book.worksheet("AthletesList")
+# --- Constants and Helpers ---
+ADMIN_IDS = (os.getenv("ADMIN_IDS") or "").split(",")
 
-bot = Bot(token=API_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
+@lru_cache(maxsize=1)
+def get_all_sportsmen() -> list[str]:
+    """Get a list of all sportsmen's names."""
+    try:
+        # Assuming names are in the second column (B) starting from the second row
+        return ws_athletes.col_values(2)[1:]
+    except Exception as e:
+        logging.error(f"Failed to get sportsmen list from Google Sheets: {e}")
+        return []
