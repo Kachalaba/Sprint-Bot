@@ -1,22 +1,49 @@
-from __future__ import annotations
-
 from aiogram.filters.callback_data import CallbackData
-from aiogram.types import InlineKeyboardMarkup
-from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+)
 
+# --- CallbackData Factories ---
 
 class StrokeCB(CallbackData, prefix="stroke"):
     stroke: str
 
+# --- Reply Keyboards ---
+
+main_keyboard = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="Додати результат ➕")],
+        [KeyboardButton(text="Мої результати 🏆"), KeyboardButton(text="Особисті рекорди 🥇")],
+    ],
+    resize_keyboard=True,
+)
+
+# --- Inline Keyboards ---
 
 def get_stroke_keyboard() -> InlineKeyboardMarkup:
-    """Return keyboard for stroke selection."""
-    builder = InlineKeyboardBuilder()
-    builder.button(
-        text="Вільний стиль", callback_data=StrokeCB(stroke="freestyle").pack()
+    """Get keyboard for choosing swim stroke."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🏊‍♂️ Кроль", callback_data=StrokeCB(stroke="freestyle").pack()),
+                InlineKeyboardButton(text="🏊‍♀️ Спина", callback_data=StrokeCB(stroke="backstroke").pack()),
+            ],
+            [
+                InlineKeyboardButton(text="🦋 Батерфляй", callback_data=StrokeCB(stroke="butterfly").pack()),
+                InlineKeyboardButton(text="🐸 Брас", callback_data=StrokeCB(stroke="breaststroke").pack()),
+            ],
+        ]
     )
-    builder.button(text="Батерфляй", callback_data=StrokeCB(stroke="butterfly").pack())
-    builder.button(text="Брас", callback_data=StrokeCB(stroke="breaststroke").pack())
-    builder.button(text="На спині", callback_data=StrokeCB(stroke="backstroke").pack())
-    builder.adjust(2)
-    return builder.as_markup()
+
+def get_history_keyboard() -> InlineKeyboardMarkup:
+    """Get keyboard with a button to show detailed history."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📜 Показати детальну історію", callback_data="history")
+            ]
+        ]
+    )
