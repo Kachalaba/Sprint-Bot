@@ -8,8 +8,8 @@ from aiogram import F, Router, types
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from keyboards import StrokeCB, get_stroke_keyboard
-from services import ADMIN_IDS, ws_athletes, ws_log, ws_pr, ws_results
+from keyboards import StrokeCB, get_stroke_keyboard, get_history_keyboard
+from services.google_sheets import ADMIN_IDS, ws_athletes, ws_log, ws_pr, ws_results
 from utils import AddResult, fmt_time, get_segments, parse_time, pr_key, speed
 
 router = Router()
@@ -96,7 +96,8 @@ async def collect(message: types.Message, state: FSMContext) -> None:
         else:
             old = float(ws_pr.cell(cell.row, 2).value.replace(",", "."))
             if seg_time < old:
-                ws_pr.update_row(cell.row, [key, seg_time, now])
+                # --- ИСПРАВЛЕННАЯ СТРОКА ---
+                ws_pr.update(f'A{cell.row}:C{cell.row}', [[key, seg_time, now]])
                 new_prs.append((i, seg_time))
     txt = (
         f"✅ Збережено! Загальний час <b>{fmt_time(total)}</b>\n"
@@ -185,7 +186,7 @@ async def records(cb: types.CallbackQuery) -> None:
             continue
 
     if not best:
-        return await cb.message.answer("Немає рекордів.")
+        return await cb.answer("Немає рекордів.")
     
     lines = []
     for dist, arr in sorted(best.items()):
@@ -248,7 +249,7 @@ async def menu_history(cb: types.CallbackQuery) -> None:
     await history(cb)
 
 
-@router.callback_query(F.data == "menu_records")
+@router.callback__query(F.data == "menu_records")
 async def menu_records(cb: types.CallbackQuery) -> None:
     """Menu alias for records."""
     await records(cb)
