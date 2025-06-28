@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 
 from aiogram import F, Router, types
@@ -105,7 +106,7 @@ async def collect(message: types.Message, state: FSMContext) -> None:
         txt += "\n" + "\n".join(
             f"🥳 Новий PR сегменту #{i+1}: {fmt_time(t)}" for i, t in new_prs
         )
-    await message.answer(txt)
+    await message.answer(txt, parse_mode="HTML")
     seg_lens = get_segments(dist)
     speeds = [speed(seg, t) for seg, t in zip(seg_lens, splits)]
     avg_speed = speed(dist, total)
@@ -116,33 +117,58 @@ async def collect(message: types.Message, state: FSMContext) -> None:
     analysis_text = (
         "📊 <b>Аналіз результату</b>\n"
         f"• Швидкості по сегментах: "
-        + " • ".join(f"{v:.2f} м/с" for v in speeds)
+        + " • ".join(f"{v:.2f} м/с" for v in speeds)
         + "\n"
-        f"• Середня швидкість: {avg_speed:.2f} м/с\n"
-        f"• Темп: {pace:.1f} сек/100 м\n"
+        f"• Середня швидкість: {avg_speed:.2f} м/с\n"
+        f"• Темп: {pace:.1f} сек/100 м\n"
         f"• Деградація темпу: {degradation:.1f}%"
     )
-    await message.answer(analysis_text)
+    await message.answer(analysis_text, parse_mode="HTML")
 
 
 @router.callback_query(F.data == "history")
 async def history(cb: types.CallbackQuery) -> None:
     """Show history of results for user."""
-    rows = ws_results.get_all_values()[::-1]
-    out = []
-    for row in rows:
-        if row and str(row[0]) == str(cb.from_user.id):
-            dist = int(row[3])
-            splits = json.loads(row[5])
-            date = row[4]
-            for i, t in enumerate(splits):
-                out.append(
-                    f"{date} | {dist} м seg#{i+1}: {fmt_time(float(t))} ("
-                    f"{speed(get_segments(dist)[i], float(t)):.2f} м/с)"
-                )
-            if len(out) >= 30:
-                break
-    await cb.message.answer("\n".join(out) if out else "Історія поки порожня.")
+    try:
+        rows = ws_results.get_all_values()[::-1]
+        out = []
+        processed_count = 0
+        for row in rows:
+            if row and str(row[0]) == str(cb.from_user.id):
+                try:
+                    dist = int(row[3])
+                    splits = json.loads(row[5])
+                    date = row[4]
+                    
+                    out.append(f"<b>{date} | {dist} м:</b>")
+                    
+                    for i, t in enumerate(splits):
+                        try:
+                            segment_speed = speed(get_segments(dist)[i], float(t))
+                            out.append(
+                                f"  - Відрізок {i+1}: {fmt_time(float(t))} (швидкість: {segment_speed:.2f} м/с)"
+                            )
+                        except IndexError:
+                            out.append(
+                                f"  - Відрізок {i+1}: {fmt_time(float(t))} (ПОМИЛКА: зайвий відрізок)"
+                            )
+                    
+                    out.append("-" * 20)
+                    processed_count += 1
+
+                except (ValueError, json.JSONDecodeError, IndexError) as e:
+                    logging.warning(f"Skipping malformed row for user {cb.from_user.id}: {row}. Error: {e}")
+                    continue
+
+                if processed_count >= 10:
+                    out.append("...")
+                    break
+                    
+        await cb.message.answer("\n".join(out) if out else "Історія поки порожня.", parse_mode="HTML")
+    
+    except Exception as e:
+        logging.error(f"Critical error in history handler: {e}", exc_info=True)
+        await cb.message.answer("Сталася критична помилка при завантаженні історії.")
 
 
 @router.callback_query(F.data == "records")
@@ -151,30 +177,18 @@ async def records(cb: types.CallbackQuery) -> None:
     rows = ws_pr.get_all_values()
     best = {}
     for row in rows:
-        uid, _, dist@router.callback_query(F.data == "history")
-async def history(cb: types.CallbackQuery) -> None:
-    """Show history of results for user."""
-    rows = ws_results.get_all_values()[::-1]
-    out = []
-    for row in rows:
-        if row and str(row[0]) == str(cb.from_user.id):
-            dist = int(row[3])
-            splits = json.loads(row[5])
-            date = row[4]
-            for i, t in enumerate(splits):
-                out.append(
-                    f"{date} | {dist} м seg#{i+1}: {fmt_time(float(t))} ("
-                    f"{speed(get_segments(dist)[i], float(t)):.2f} м/с)"
-                )
-            if len(out) >= 30:
-                break
-    await cb.message.answer("\n".join(out) if out else "Історія поки порожня."), _ = row[0].split("|")
-        if int(uid) == cb.from_user.id:
-            best.setdefault(dist, []).append(float(row[1].replace(",", ".")))
+        try:
+            uid, _, dist, _ = row[0].split("|")
+            if int(uid) == cb.from_user.id:
+                best.setdefault(dist, []).append(float(row[1].replace(",", ".")))
+        except (ValueError, IndexError):
+            continue
+
     if not best:
         return await cb.message.answer("Немає рекордів.")
+    
     lines = []
-    for dist, arr in best.items():
+    for dist, arr in sorted(best.items()):
         total = sum(arr)
         lines.append(
             f"🏅 {dist} м → {fmt_time(total)} (сума найкращих)\n"
@@ -200,15 +214,18 @@ async def menu_sprint(cb: types.CallbackQuery, state: FSMContext) -> None:
         return await cb.message.answer(
             "Помилка: не вдалося отримати список спортсменів. Спробуйте пізніше."
         )
-    kb = InlineKeyboardMarkup(row_width=2)
+    
+    buttons = []
     for rec in records:
         athlete_id = rec["ID"]
         athlete_name = rec.get("Name", str(athlete_id))
-        kb.insert(
+        buttons.append(
             InlineKeyboardButton(
                 text=athlete_name, callback_data=f"select_{athlete_id}"
             )
         )
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[buttons])
     await cb.message.answer("Оберіть спортсмена:", reply_markup=kb)
     await state.set_state(AddResult.choose_athlete)
 
