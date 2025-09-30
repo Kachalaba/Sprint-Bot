@@ -3,12 +3,10 @@ from __future__ import annotations
 from typing import Iterable
 
 from aiogram.filters.callback_data import CallbackData
-from aiogram.types import (
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    KeyboardButton,
-    ReplyKeyboardMarkup,
-)
+from aiogram.types import (InlineKeyboardButton, InlineKeyboardMarkup,
+                           KeyboardButton, ReplyKeyboardMarkup)
+
+from role_service import ROLE_ADMIN, ROLE_TRAINER
 
 # --- CallbackData Factories ---
 
@@ -218,8 +216,9 @@ def get_result_actions_keyboard(
     )
 
 
-def get_main_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
-    """Return main menu keyboard with optional admin buttons."""
+def get_main_keyboard(role: str) -> InlineKeyboardMarkup:
+    """Return main menu keyboard respecting user role."""
+
     buttons = [
         [InlineKeyboardButton(text="Спринт", callback_data="menu_sprint")],
         [InlineKeyboardButton(text="Стаєр", callback_data="menu_stayer")],
@@ -227,7 +226,8 @@ def get_main_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="Рекорди", callback_data="menu_records")],
         [InlineKeyboardButton(text="💬 Повідомлення", callback_data="menu_messages")],
     ]
-    if is_admin:
+
+    if role in {ROLE_TRAINER, ROLE_ADMIN}:
         buttons.append(
             [
                 InlineKeyboardButton(
@@ -235,5 +235,8 @@ def get_main_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
                 )
             ]
         )
+
+    if role == ROLE_ADMIN:
         buttons.append([InlineKeyboardButton(text="Адмін", callback_data="menu_admin")])
+
     return InlineKeyboardMarkup(inline_keyboard=buttons)

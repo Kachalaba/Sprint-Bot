@@ -6,8 +6,10 @@ from aiogram import Router, types
 from aiogram.filters import Command
 from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
+from filters import RoleFilter
 from keyboards import get_main_keyboard
-from services import ADMIN_IDS, ws_athletes
+from role_service import ROLE_ADMIN, ROLE_ATHLETE, ROLE_TRAINER, RoleService
+from services import ws_athletes
 
 router = Router()
 
@@ -22,8 +24,8 @@ start_kb = ReplyKeyboardMarkup(
 )
 
 
-@router.message(Command("reg"))
-@router.message(lambda m: m.text == "Реєстрація")
+@router.message(Command("reg"), RoleFilter(ROLE_TRAINER, ROLE_ADMIN))
+@router.message(RoleFilter(ROLE_TRAINER, ROLE_ADMIN), lambda m: m.text == "Реєстрація")
 async def cmd_reg(message: types.Message) -> None:
     """Request athlete contact."""
     kb = ReplyKeyboardMarkup(
@@ -35,7 +37,7 @@ async def cmd_reg(message: types.Message) -> None:
 
 
 @router.message(lambda m: m.contact is not None)
-async def reg_contact(message: types.Message) -> None:
+async def reg_contact(message: types.Message, role_service: RoleService) -> None:
     """Save athlete contact."""
     contact = message.contact
     try:
@@ -50,6 +52,8 @@ async def reg_contact(message: types.Message) -> None:
         return await message.answer(
             "Помилка при збереженні контакту. Спробуйте пізніше."
         )
+    await role_service.set_role(contact.user_id, ROLE_ATHLETE)
+    await role_service.upsert_user(contact)
     await message.answer(
         f"✅ Спортсмен {contact.first_name} зареєстрований.",
         reply_markup=start_kb,
@@ -58,9 +62,8 @@ async def reg_contact(message: types.Message) -> None:
 
 @router.message(Command("start"))
 @router.message(lambda m: m.text == "Старт")
-async def cmd_start(message: types.Message) -> None:
+async def cmd_start(message: types.Message, role_service: RoleService) -> None:
     """Show main menu."""
-    is_admin = str(message.from_user.id) in ADMIN_IDS
-    await message.answer(
-        "Оберіть розділ:", reply_markup=get_main_keyboard(is_admin=is_admin)
-    )
+    await role_service.upsert_user(message.from_user)
+    role = await role_service.get_role(message.from_user.id)
+    await message.answer("Оберіть розділ:", reply_markup=get_main_keyboard(role))
