@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+
 from typing import Iterable
 
 from aiogram.filters.callback_data import CallbackData
@@ -172,13 +174,16 @@ def get_repeat_keyboard(athlete_id: int) -> InlineKeyboardMarkup:
 def pack_timestamp_for_callback(timestamp: str) -> str:
     """Convert timestamp to callback-friendly format."""
 
-    return timestamp.replace(" ", "_")
+    encoded = base64.urlsafe_b64encode(timestamp.encode("utf-8")).decode("ascii")
+    return encoded.rstrip("=")
 
 
 def unpack_timestamp_from_callback(raw: str) -> str:
     """Restore original timestamp from callback data."""
 
-    return raw.replace("_", " ")
+    padding = "=" * (-len(raw) % 4)
+    decoded = base64.urlsafe_b64decode((raw + padding).encode("ascii"))
+    return decoded.decode("utf-8")
 
 
 def get_comment_prompt_keyboard() -> InlineKeyboardMarkup:
