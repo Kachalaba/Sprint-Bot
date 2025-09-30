@@ -36,6 +36,7 @@ from keyboards import (
     pack_timestamp_for_callback,
     unpack_timestamp_from_callback,
 )
+from notifications import NotificationService
 from services import ADMIN_IDS, ws_athletes, ws_log, ws_pr, ws_results
 from utils import AddResult, fmt_time, get_segments, parse_time, pr_key, speed
 
@@ -235,6 +236,7 @@ async def _finalize_result_entry(
     actor: types.User,
     state: FSMContext,
     comment: str | None,
+    notifications: NotificationService,
 ) -> None:
     """Persist result and share summary with optional comment."""
 
@@ -287,6 +289,17 @@ async def _finalize_result_entry(
 
     analysis_text = _analysis_text(dist, splits, total)
     await target.answer(analysis_text, parse_mode="HTML")
+
+    await notifications.notify_new_result(
+        actor_id=actor.id,
+        actor_name=actor.full_name,
+        athlete_id=athlete_id,
+        athlete_name=actor.full_name,
+        dist=dist,
+        total=total,
+        timestamp=timestamp,
+        new_prs=new_prs,
+    )
 
     LAST_RESULTS[(actor.id, athlete_id)] = {
         "athlete_id": athlete_id,
@@ -448,22 +461,36 @@ async def collect(message: types.Message, state: FSMContext) -> None:
 
 
 @router.message(AddResult.waiting_for_comment)
-async def comment_received(message: types.Message, state: FSMContext) -> None:
+async def comment_received(
+    message: types.Message,
+    state: FSMContext,
+    notifications: NotificationService,
+) -> None:
     """Save result together with supplied comment."""
 
-    await _finalize_result_entry(message, message.from_user, state, message.text)
+    await _finalize_result_entry(
+        message, message.from_user, state, message.text, notifications
+    )
 
 
 @router.callback_query(F.data == "comment_skip", AddResult.waiting_for_comment)
-async def comment_skipped(cb: types.CallbackQuery, state: FSMContext) -> None:
+async def comment_skipped(
+    cb: types.CallbackQuery,
+    state: FSMContext,
+    notifications: NotificationService,
+) -> None:
     """Finalize result without comment."""
 
     await cb.answer("Без нотатки")
-    await _finalize_result_entry(cb.message, cb.from_user, state, None)
+    await _finalize_result_entry(cb.message, cb.from_user, state, None, notifications)
 
 
 @router.callback_query(RepeatCB.filter())
-async def repeat_previous(cb: types.CallbackQuery, callback_data: RepeatCB) -> None:
+async def repeat_previous(
+    cb: types.CallbackQuery,
+    callback_data: RepeatCB,
+    notifications: NotificationService,
+) -> None:
     """Duplicate the previously saved result for faster logging."""
 
     key = (cb.from_user.id, callback_data.athlete_id)
@@ -512,6 +539,17 @@ async def repeat_previous(cb: types.CallbackQuery, callback_data: RepeatCB) -> N
     await cb.message.answer(analysis_text, parse_mode="HTML")
 
     payload.update(timestamp=timestamp, comment="")
+
+    await notifications.notify_new_result(
+        actor_id=cb.from_user.id,
+        actor_name=cb.from_user.full_name,
+        athlete_id=payload["athlete_id"],
+        athlete_name=payload["athlete_name"],
+        dist=payload["dist"],
+        total=total,
+        timestamp=timestamp,
+        new_prs=new_prs,
+    )
 
 
 @router.callback_query(CommentCB.filter(F.action == "edit"))

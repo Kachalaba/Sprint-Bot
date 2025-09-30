@@ -9,9 +9,11 @@ from aiogram import Dispatcher
 
 from handlers.common import router as common_router
 from handlers.error_handler import router as error_router
+from handlers.notifications import router as notifications_router
 from handlers.progress import router as progress_router
 from handlers.registration import router as registration_router
 from handlers.sprint_actions import router as sprint_router
+from notifications import NotificationService
 from services import bot
 
 LOG_DIR = "logs"
@@ -35,22 +37,26 @@ logger.addHandler(file_handler)
 logger.addHandler(stream_handler)
 
 
-def setup_dispatcher() -> Dispatcher:
+def setup_dispatcher(notification_service: NotificationService) -> Dispatcher:
     """Configure dispatcher with routers."""
     dp = Dispatcher()
     dp.include_router(registration_router)
     dp.include_router(common_router)
     dp.include_router(progress_router)
     dp.include_router(sprint_router)
+    dp.include_router(notifications_router)
     dp.include_router(error_router)
+    dp.startup.register(notification_service.startup)
+    dp.shutdown.register(notification_service.shutdown)
     return dp
 
 
 async def main() -> None:
     """Start Sprint Bot."""
     logger.info("[SprintBot] starting…")
-    dp = setup_dispatcher()
-    await dp.start_polling(bot)
+    notification_service = NotificationService(bot=bot)
+    dp = setup_dispatcher(notification_service)
+    await dp.start_polling(bot, notifications=notification_service)
 
 
 if __name__ == "__main__":
