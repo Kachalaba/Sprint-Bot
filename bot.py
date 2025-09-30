@@ -11,6 +11,7 @@ from aiogram import Dispatcher
 
 from backup_service import BackupService
 from chat_service import DB_PATH, ChatService
+from handlers.admin import router as admin_router
 from handlers.backup import router as backup_router
 from handlers.common import router as common_router
 from handlers.error_handler import router as error_router
@@ -20,6 +21,7 @@ from handlers.progress import router as progress_router
 from handlers.registration import router as registration_router
 from handlers.sprint_actions import router as sprint_router
 from notifications import NotificationService
+from role_service import RoleService
 from services import ADMIN_IDS, bot
 
 LOG_DIR = "logs"
@@ -81,6 +83,7 @@ def setup_dispatcher(
     dp = Dispatcher()
     dp.include_router(registration_router)
     dp.include_router(common_router)
+    dp.include_router(admin_router)
     dp.include_router(progress_router)
     dp.include_router(sprint_router)
     dp.include_router(messages_router)
@@ -101,6 +104,8 @@ async def main() -> None:
     chat_service = ChatService()
     await chat_service.init()
     admin_chat_ids = _parse_admin_chat_ids()
+    role_service = RoleService()
+    await role_service.init(admin_ids=admin_chat_ids)
     backup_service = BackupService(
         bot=bot,
         db_path=Path(os.getenv("CHAT_DB_PATH", DB_PATH)),
@@ -117,6 +122,7 @@ async def main() -> None:
         notifications=notification_service,
         chat_service=chat_service,
         backup_service=backup_service,
+        role_service=role_service,
     )
 
 

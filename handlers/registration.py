@@ -9,8 +9,10 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
+from filters import RoleFilter
 from keyboards import get_main_keyboard
-from services import ADMIN_IDS, bot, ws_athletes
+from role_service import ROLE_ATHLETE, ROLE_TRAINER, RoleService
+from services import bot, ws_athletes
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +28,11 @@ class RegStates(StatesGroup):
     waiting_for_name = State()
 
 
-@router.callback_query(F.data == "invite")
-async def send_invite(cb: types.CallbackQuery) -> None:
+@router.callback_query(RoleFilter(ROLE_TRAINER), F.data == "invite")
+async def send_invite(cb: types.CallbackQuery, role_service: RoleService) -> None:
     """Generate one-time invite link for a coach."""
-    if str(cb.from_user.id) not in ADMIN_IDS:
-        return await cb.answer("Недостатньо прав.", show_alert=True)
 
+    await role_service.upsert_user(cb.from_user, default_role=ROLE_TRAINER)
     code = secrets.token_hex(4)
     active_invites[code] = cb.from_user.id
     me = await bot.get_me()
@@ -42,7 +43,12 @@ async def send_invite(cb: types.CallbackQuery) -> None:
 
 
 @router.message(CommandStart(deep_link=True))
-async def start_with_code(message: types.Message, command: CommandStart.CommandObject, state: FSMContext) -> None:  # type: ignore[attr-defined]
+async def start_with_code(
+    message: types.Message,
+    command: CommandStart.CommandObject,
+    state: FSMContext,
+    role_service: RoleService,
+) -> None:  # type: ignore[attr-defined]
     """Handle /start with invite code."""
     args = command.args
     if not args or not args.startswith("\u0440\u0435\u0433_"):
@@ -54,12 +60,14 @@ async def start_with_code(message: types.Message, command: CommandStart.CommandO
         return
 
     await state.set_state(RegStates.waiting_for_name)
-    await state.update_data(code=code)
+    await state.update_data(code=code, trainer_id=active_invites.get(code))
     await message.answer("Вітаємо! Введіть ваше ім'я та прізвище.")
 
 
 @router.message(RegStates.waiting_for_name)
-async def process_name(message: types.Message, state: FSMContext) -> None:
+async def process_name(
+    message: types.Message, state: FSMContext, role_service: RoleService
+) -> None:
     """Save athlete name and finish registration."""
     data = await state.get_data()
     code = data.get("code")
@@ -78,7 +86,12 @@ async def process_name(message: types.Message, state: FSMContext) -> None:
         return
 
     active_invites.pop(code, None)
+    trainer_id = data.get("trainer_id")
+    await role_service.upsert_user(message.from_user, default_role=ROLE_ATHLETE)
+    await role_service.set_role(message.from_user.id, ROLE_ATHLETE)
+    if trainer_id:
+        await role_service.set_trainer(message.from_user.id, int(trainer_id))
     await state.clear()
     await message.answer(
-        f"✅ {name} зареєстрований!", reply_markup=get_main_keyboard(is_admin=False)
+        f"✅ {name} зареєстрований!", reply_markup=get_main_keyboard(ROLE_ATHLETE)
     )

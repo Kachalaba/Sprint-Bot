@@ -9,8 +9,10 @@ from typing import Iterable
 import matplotlib
 from aiogram import F, Router, types
 from aiogram.filters import Command
-from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (BufferedInputFile, InlineKeyboardButton,
+                           InlineKeyboardMarkup)
 
+from role_service import ROLE_ATHLETE, RoleService
 from services import ws_athletes, ws_results
 from utils import fmt_time
 
@@ -19,6 +21,19 @@ import matplotlib.pyplot as plt  # noqa: E402  # isort:skip
 
 router = Router()
 logger = logging.getLogger(__name__)
+
+
+def _extract_athlete_id(record: dict) -> int | None:
+    """Safely parse athlete id from worksheet record."""
+
+    try:
+        raw_id = record.get("ID")
+    except AttributeError:  # pragma: no cover - defensive
+        return None
+    try:
+        return int(raw_id)
+    except (TypeError, ValueError):
+        return None
 
 
 def _chunked(
@@ -65,7 +80,13 @@ def _build_athletes_keyboard(records: list[dict]) -> InlineKeyboardMarkup:
 
     buttons = []
     for rec in records:
-        athlete_id = rec.get("ID") or rec.get("athlete_id") or rec.get("id")
+        athlete_id = _extract_athlete_id(rec)
+        if athlete_id is None:
+            fallback = rec.get("athlete_id") or rec.get("id")
+            try:
+                athlete_id = int(fallback) if fallback is not None else None
+            except (TypeError, ValueError):
+                athlete_id = None
         name = rec.get("Name") or rec.get("name") or str(athlete_id)
         if not athlete_id:
             continue
@@ -131,25 +152,104 @@ def _build_progress_plot(
     return buf.getvalue()
 
 
+async def _send_progress_report(
+    event: types.Message | types.CallbackQuery, athlete_id: int
+) -> None:
+    """Render progress for athlete and send to requester."""
+
+    try:
+        raw_rows = ws_results.get_all_values()
+    except Exception as exc:  # pragma: no cover - external service
+        logger.error("Failed to load results: %s", exc, exc_info=True)
+        target = event.message if isinstance(event, types.CallbackQuery) else event
+        await target.answer("Не вдалося завантажити результати. Спробуйте пізніше.")
+        if isinstance(event, types.CallbackQuery):
+            await event.answer()
+        return
+
+    if len(raw_rows) <= 1:
+        target = event.message if isinstance(event, types.CallbackQuery) else event
+        await target.answer("Для цього спортсмена ще немає результатів.")
+        if isinstance(event, types.CallbackQuery):
+            await event.answer()
+        return
+
+    athlete_key = str(athlete_id)
+    distances = _parse_results(raw_rows[1:], athlete_key)
+    if not distances:
+        target = event.message if isinstance(event, types.CallbackQuery) else event
+        await target.answer("Для цього спортсмена ще немає результатів.")
+        if isinstance(event, types.CallbackQuery):
+            await event.answer()
+        return
+
+    athlete_name = next(
+        (row[1] for row in raw_rows[1:] if str(row[0]) == athlete_key and row[1]),
+        "спортсмен",
+    )
+
+    image_bytes = _build_progress_plot(distances, athlete_name)
+    table_text = _format_progress_table(distances)
+
+    target = event.message if isinstance(event, types.CallbackQuery) else event
+    await target.answer_photo(
+        BufferedInputFile(image_bytes, filename=f"progress_{athlete_key}.png"),
+        caption=f"📈 Прогрес для {athlete_name}",
+    )
+    await target.answer(
+        "<b>Динаміка за дистанціями</b>\n" + table_text,
+        parse_mode="HTML",
+    )
+    if isinstance(event, types.CallbackQuery):
+        await event.answer()
+
+
 @router.message(Command("progress"))
-async def cmd_progress(message: types.Message) -> None:
+async def cmd_progress(message: types.Message, role_service: RoleService) -> None:
     """Ask to choose athlete for progress visualization."""
+
+    await role_service.upsert_user(message.from_user)
+    role = await role_service.get_role(message.from_user.id)
+    if role == ROLE_ATHLETE:
+        await _send_progress_report(message, message.from_user.id)
+        return
 
     try:
         records = ws_athletes.get_all_records()
     except Exception as exc:  # pragma: no cover - depends on external service
-        logger.error("Failed to load athletes: %%s", exc, exc_info=True)
+        logger.error("Failed to load athletes: %s", exc, exc_info=True)
         await message.answer(
             "Не вдалося отримати список спортсменів. Спробуйте пізніше."
         )
         return
 
-    if not records:
+    accessible_ids = set(
+        await role_service.get_accessible_athletes(message.from_user.id)
+    )
+    filtered = [
+        rec
+        for rec in records
+        if (athlete_id := _extract_athlete_id(rec)) is not None
+        and (not accessible_ids or athlete_id in accessible_ids)
+    ]
+
+    await role_service.bulk_sync_athletes(
+        [
+            (
+                athlete_id,
+                rec.get("Name", str(athlete_id)),
+            )
+            for rec in filtered
+            if (athlete_id := _extract_athlete_id(rec)) is not None
+        ]
+    )
+
+    if not filtered:
         await message.answer("Поки немає зареєстрованих спортсменів.")
         return
 
     try:
-        keyboard = _build_athletes_keyboard(records)
+        keyboard = _build_athletes_keyboard(filtered)
     except ValueError:
         await message.answer("Не знайдено жодного валідного спортсмена у таблиці.")
         return
@@ -160,43 +260,17 @@ async def cmd_progress(message: types.Message) -> None:
 
 
 @router.callback_query(F.data.startswith("progress_select_"))
-async def show_progress(cb: types.CallbackQuery) -> None:
+async def show_progress(cb: types.CallbackQuery, role_service: RoleService) -> None:
     """Generate progress visualization for selected athlete."""
 
-    athlete_id = cb.data.split("_", 2)[-1]
     try:
-        raw_rows = ws_results.get_all_values()
-    except Exception as exc:  # pragma: no cover - depends on external service
-        logger.error("Failed to load results: %%s", exc, exc_info=True)
-        await cb.message.answer("Не вдалося завантажити результати. Спробуйте пізніше.")
-        await cb.answer()
+        athlete_id = int(cb.data.split("_", 2)[-1])
+    except ValueError:
+        await cb.answer("Некоректний ідентифікатор.", show_alert=True)
         return
 
-    if len(raw_rows) <= 1:
-        await cb.message.answer("Для цього спортсмена ще немає результатів.")
-        await cb.answer()
+    if not await role_service.can_access_athlete(cb.from_user.id, athlete_id):
+        await cb.answer("Немає доступу до цього спортсмена.", show_alert=True)
         return
 
-    distances = _parse_results(raw_rows[1:], athlete_id)
-    if not distances:
-        await cb.message.answer("Для цього спортсмена ще немає результатів.")
-        await cb.answer()
-        return
-
-    athlete_name = next(
-        (row[1] for row in raw_rows[1:] if str(row[0]) == athlete_id and row[1]),
-        "спортсмен",
-    )
-
-    image_bytes = _build_progress_plot(distances, athlete_name)
-    table_text = _format_progress_table(distances)
-
-    await cb.message.answer_photo(
-        BufferedInputFile(image_bytes, filename=f"progress_{athlete_id}.png"),
-        caption=f"📈 Прогрес для {athlete_name}",
-    )
-    await cb.message.answer(
-        "<b>Динаміка за дистанціями</b>\n" + table_text,
-        parse_mode="HTML",
-    )
-    await cb.answer()
+    await _send_progress_report(cb, athlete_id)

@@ -37,7 +37,8 @@ from keyboards import (
     unpack_timestamp_from_callback,
 )
 from notifications import NotificationService
-from services import ADMIN_IDS, ws_athletes, ws_log, ws_pr, ws_results
+from role_service import ROLE_ATHLETE, ROLE_TRAINER, RoleService
+from services import ws_athletes, ws_log, ws_pr, ws_results
 from utils import AddResult, fmt_time, get_segments, parse_time, pr_key, speed
 
 router = Router()
@@ -321,6 +322,7 @@ async def add(cb: types.CallbackQuery, state: FSMContext) -> None:
         reply_markup=get_distance_keyboard(),
     )
     await state.set_state(AddResult.choose_dist)
+    await cb.answer()
 
 
 @router.callback_query(DistanceCB.filter(), AddResult.choose_dist)
@@ -793,17 +795,10 @@ async def records(cb: types.CallbackQuery) -> None:
     await cb.message.answer("\n\n".join(lines))
 
 
-@router.callback_query(F.data == "admin")
-async def admin(cb: types.CallbackQuery) -> None:
-    """Admin placeholder."""
-
-    if str(cb.from_user.id) not in ADMIN_IDS:
-        return
-    await cb.message.answer("Адмін‑панель у процесі. Дані видно в Google Sheets.")
-
-
 @router.callback_query(F.data == "menu_sprint")
-async def menu_sprint(cb: types.CallbackQuery, state: FSMContext) -> None:
+async def menu_sprint(
+    cb: types.CallbackQuery, state: FSMContext, role_service: RoleService
+) -> None:
     """Show list of athletes for result entry."""
 
     try:
@@ -814,29 +809,64 @@ async def menu_sprint(cb: types.CallbackQuery, state: FSMContext) -> None:
             "Помилка: не вдалося отримати список спортсменів. Спробуйте пізніше."
         )
 
-    buttons = []
+    parsed_records: list[tuple[int, str]] = []
     for rec in records:
-        athlete_id = rec["ID"]
-        athlete_name = rec.get("Name", str(athlete_id))
+        try:
+            athlete_id = int(rec["ID"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        name = rec.get("Name", str(athlete_id))
+        parsed_records.append((athlete_id, name))
+
+    if parsed_records:
+        await role_service.bulk_sync_athletes(parsed_records)
+
+    role = await role_service.get_role(cb.from_user.id)
+    if role == ROLE_ATHLETE:
+        await state.update_data(athlete_id=cb.from_user.id)
+        await cb.message.answer(
+            "Оберіть дистанцію або введіть вручну:",
+            reply_markup=get_distance_keyboard(),
+        )
+        await state.set_state(AddResult.choose_dist)
+        await cb.answer()
+        return
+
+    accessible_ids = set(await role_service.get_accessible_athletes(cb.from_user.id))
+    buttons = []
+    for athlete_id, athlete_name in parsed_records:
+        if accessible_ids and athlete_id not in accessible_ids:
+            continue
         buttons.append(
             InlineKeyboardButton(
                 text=athlete_name, callback_data=f"select_{athlete_id}"
             )
         )
 
+    if not buttons:
+        await cb.message.answer("Немає спортсменів, до яких у вас є доступ.")
+        await cb.answer()
+        return
+
     kb = InlineKeyboardMarkup(inline_keyboard=[buttons])
     await cb.message.answer("Оберіть спортсмена:", reply_markup=kb)
     await state.set_state(AddResult.choose_athlete)
+    await cb.answer()
 
 
 @router.callback_query(F.data.startswith("select_"))
-async def select_athlete(cb: types.CallbackQuery, state: FSMContext) -> None:
+async def select_athlete(
+    cb: types.CallbackQuery, state: FSMContext, role_service: RoleService
+) -> None:
     """Save selected athlete and ask for distance."""
 
     try:
         athlete_id = int(cb.data.split("_", 1)[1])
     except ValueError:
         return await cb.message.answer("Помилка: ID спортсмена має бути числом.")
+    if not await role_service.can_access_athlete(cb.from_user.id, athlete_id):
+        await cb.answer("Немає доступу до цього спортсмена.", show_alert=True)
+        return
     await state.update_data(athlete_id=athlete_id)
     await cb.message.answer(
         "Оберіть дистанцію або введіть вручну:",
@@ -857,13 +887,6 @@ async def menu_records(cb: types.CallbackQuery) -> None:
     """Menu alias for records."""
 
     await records(cb)
-
-
-@router.callback_query(F.data == "menu_admin")
-async def alias_admin(cb: types.CallbackQuery) -> None:
-    """Menu alias for admin panel."""
-
-    await admin(cb)
 
 
 @router.callback_query(F.data == "menu_stayer")

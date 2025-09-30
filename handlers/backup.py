@@ -6,35 +6,23 @@ from aiogram import Router, types
 from aiogram.filters import Command
 
 from backup_service import BackupService
-from services import ADMIN_IDS
+from role_service import ROLE_ADMIN, RoleService
 
 router = Router()
-
-ADMIN_CHAT_IDS: set[int] = set()
-for raw_id in ADMIN_IDS:
-    raw_id = raw_id.strip()
-    if not raw_id:
-        continue
-    try:
-        ADMIN_CHAT_IDS.add(int(raw_id))
-    except ValueError:
-        continue
-
-
-def _is_admin(message: types.Message) -> bool:
-    user_id = message.from_user.id if message.from_user else None
-    if user_id is None:
-        return False
-    return user_id in ADMIN_CHAT_IDS
 
 
 @router.message(Command("backup_now"))
 async def backup_now_handler(
-    message: types.Message, backup_service: BackupService
+    message: types.Message,
+    backup_service: BackupService,
+    role_service: RoleService,
 ) -> None:
     """Trigger an immediate backup if the sender is an administrator."""
 
-    if not _is_admin(message):
+    if message.from_user is None:
+        await message.answer("Команда доступна лише адміністраторам.")
+        return
+    if await role_service.get_role(message.from_user.id) != ROLE_ADMIN:
         await message.answer("Команда доступна лише адміністраторам.")
         return
 
@@ -53,11 +41,16 @@ async def backup_now_handler(
 
 @router.message(Command("backup_status"))
 async def backup_status_handler(
-    message: types.Message, backup_service: BackupService
+    message: types.Message,
+    backup_service: BackupService,
+    role_service: RoleService,
 ) -> None:
     """Display recent backups."""
 
-    if not _is_admin(message):
+    if message.from_user is None:
+        await message.answer("Команда доступна лише адміністраторам.")
+        return
+    if await role_service.get_role(message.from_user.id) != ROLE_ADMIN:
         await message.answer("Команда доступна лише адміністраторам.")
         return
 
@@ -81,11 +74,16 @@ async def backup_status_handler(
 
 @router.message(Command("restore_backup"))
 async def restore_backup_handler(
-    message: types.Message, backup_service: BackupService
+    message: types.Message,
+    backup_service: BackupService,
+    role_service: RoleService,
 ) -> None:
     """Restore the latest backup or one specified by key."""
 
-    if not _is_admin(message):
+    if message.from_user is None:
+        await message.answer("Команда доступна лише адміністраторам.")
+        return
+    if await role_service.get_role(message.from_user.id) != ROLE_ADMIN:
         await message.answer("Команда доступна лише адміністраторам.")
         return
 
