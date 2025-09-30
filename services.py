@@ -26,13 +26,15 @@ try:
     ws_results = sh.worksheet("results")
     ws_pr = sh.worksheet("pr")
     ws_log = sh.worksheet("log")
-    ws_athletes = sh.worksheet("AthletesList") # Corrected worksheet name
+    ws_athletes = sh.worksheet("AthletesList")  # Corrected worksheet name
 
 except gspread.exceptions.SpreadsheetNotFound:
     logging.error("Spreadsheet not found. Check SPREADSHEET_KEY in .env file.")
     raise
 except gspread.exceptions.WorksheetNotFound as e:
-    logging.error(f"Worksheet not found: {e}. Make sure all worksheets (results, pr, log, AthletesList) exist.")
+    logging.error(
+        f"Worksheet not found: {e}. Make sure all worksheets (results, pr, log, AthletesList) exist."
+    )
     raise
 except Exception as e:
     logging.error(f"An error occurred during Google Sheets initialization: {e}")
@@ -40,6 +42,7 @@ except Exception as e:
 
 # --- Constants and Helpers ---
 ADMIN_IDS = (os.getenv("ADMIN_IDS") or "").split(",")
+
 
 @lru_cache(maxsize=1)
 def get_all_sportsmen() -> list[str]:
