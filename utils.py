@@ -16,6 +16,19 @@ class AddResult(StatesGroup):
     editing_comment = State()
 
 
+class TemplateStates(StatesGroup):
+    """FSM states for sprint template management."""
+
+    menu = State()
+    create_title = State()
+    create_distance = State()
+    create_stroke = State()
+    create_segments = State()
+    create_hint = State()
+    editing_value = State()
+    editing_stroke = State()
+
+
 # --- Utility Functions ---
 
 

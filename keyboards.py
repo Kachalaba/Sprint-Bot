@@ -3,8 +3,12 @@ from __future__ import annotations
 from typing import Iterable
 
 from aiogram.filters.callback_data import CallbackData
-from aiogram.types import (InlineKeyboardButton, InlineKeyboardMarkup,
-                           KeyboardButton, ReplyKeyboardMarkup)
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+)
 
 from role_service import ROLE_ADMIN, ROLE_TRAINER
 

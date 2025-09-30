@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
@@ -39,54 +38,11 @@ from keyboards import (
 from notifications import NotificationService
 from role_service import ROLE_ATHLETE, ROLE_TRAINER, RoleService
 from services import ws_athletes, ws_log, ws_pr, ws_results
+from template_service import TemplateService
 from utils import AddResult, fmt_time, get_segments, parse_time, pr_key, speed
 
 router = Router()
 
-
-@dataclass(frozen=True)
-class SprintTemplate:
-    """Describe reusable sprint presets."""
-
-    template_id: str
-    title: str
-    dist: int
-    stroke: str
-    hint: str
-
-
-SPRINT_TEMPLATES: tuple[SprintTemplate, ...] = (
-    SprintTemplate(
-        template_id="50_free",
-        title="⚡️ 50 м кроль",
-        dist=50,
-        stroke="freestyle",
-        hint="4×12.5 м — вибуховий старт та потужний фініш.",
-    ),
-    SprintTemplate(
-        template_id="100_free",
-        title="🔥 100 м кроль",
-        dist=100,
-        stroke="freestyle",
-        hint="4×25 м. Другий відрізок контрольний, третій — прискорення.",
-    ),
-    SprintTemplate(
-        template_id="100_fly",
-        title="🦋 100 м батерфляй",
-        dist=100,
-        stroke="butterfly",
-        hint="4×25 м. Тримайте стабільну техніку й темп.",
-    ),
-    SprintTemplate(
-        template_id="200_mixed",
-        title="🥇 200 м комплекс",
-        dist=200,
-        stroke="medley",
-        hint="По 50 м на стиль: батерфляй, спина, брас, кроль.",
-    ),
-)
-
-TEMPLATE_MAP = {template.template_id: template for template in SPRINT_TEMPLATES}
 
 # (coach_id, athlete_id) -> stored data for quick repeat
 LAST_RESULTS: dict[tuple[int, int], dict[str, Any]] = {}
@@ -208,10 +164,15 @@ def _persist_result(
     return total, new_prs, timestamp
 
 
-def _analysis_text(dist: int, splits: list[float], total: float) -> str:
+def _analysis_text(
+    dist: int,
+    splits: list[float],
+    total: float,
+    segments: Iterable[float] | None = None,
+) -> str:
     """Compose analysis block for the result."""
 
-    seg_lens = get_segments(dist)
+    seg_lens = [float(seg) for seg in (segments or get_segments(dist))]
     speeds = [speed(seg, t) for seg, t in zip(seg_lens, splits)]
     avg_speed = speed(dist, total)
     pace = total / dist * 100 if dist else 0
@@ -251,6 +212,7 @@ async def _finalize_result_entry(
     athlete_id = data.get("athlete_id", actor.id)
     stroke = data.get("stroke", "freestyle")
     dist = data["dist"]
+    segments: Iterable[float] | None = data.get("segments")
     comment_clean = _normalize_comment(comment)
 
     await state.clear()
@@ -288,7 +250,7 @@ async def _finalize_result_entry(
 
     await target.answer(summary, parse_mode="HTML", reply_markup=keyboard)
 
-    analysis_text = _analysis_text(dist, splits, total)
+    analysis_text = _analysis_text(dist, splits, total, segments)
     await target.answer(analysis_text, parse_mode="HTML")
 
     await notifications.notify_new_result(
@@ -308,6 +270,7 @@ async def _finalize_result_entry(
         "stroke": stroke,
         "dist": dist,
         "splits": list(splits),
+        "segments": list(float(seg) for seg in (segments or get_segments(dist))),
         "timestamp": timestamp,
         "comment": comment_clean,
     }
@@ -333,7 +296,8 @@ async def distance_selected(
 
     await cb.answer()
     dist = callback_data.value
-    await state.update_data(dist=dist, splits=[], idx=0)
+    segments = get_segments(dist)
+    await state.update_data(dist=dist, splits=[], idx=0, segments=segments)
     await cb.message.answer(
         f"Дистанція {dist} м. Оберіть стиль:", reply_markup=get_stroke_keyboard()
     )
@@ -351,11 +315,19 @@ async def manual_distance(cb: types.CallbackQuery) -> None:
 
 
 @router.callback_query(F.data == "choose_template", AddResult.choose_dist)
-async def choose_template(cb: types.CallbackQuery) -> None:
+async def choose_template(
+    cb: types.CallbackQuery, template_service: TemplateService
+) -> None:
     """Show list of sprint templates."""
 
     await cb.answer()
-    template_pairs = ((tpl.template_id, tpl.title) for tpl in SPRINT_TEMPLATES)
+    templates = await template_service.list_templates()
+    if not templates:
+        await cb.message.answer(
+            "Немає збережених шаблонів. Створіть їх командою /templates.",
+        )
+        return
+    template_pairs = ((tpl.template_id, tpl.title) for tpl in templates)
     await cb.message.answer(
         "📋 Шаблони спринтів. Оберіть потрібний:",
         reply_markup=get_template_keyboard(template_pairs),
@@ -376,30 +348,36 @@ async def back_to_distance(cb: types.CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(TemplateCB.filter(), AddResult.choose_dist)
 async def template_selected(
-    cb: types.CallbackQuery, callback_data: TemplateCB, state: FSMContext
+    cb: types.CallbackQuery,
+    callback_data: TemplateCB,
+    state: FSMContext,
+    template_service: TemplateService,
 ) -> None:
     """Handle template selection and jump straight to time collection."""
 
-    template = TEMPLATE_MAP.get(callback_data.template_id)
+    template = await template_service.get_template(callback_data.template_id)
     if not template:
         await cb.answer("Шаблон не знайдено", show_alert=True)
         return
 
     await cb.answer()
-    segs = get_segments(template.dist)
+    segs = list(template.segments_or_default())
     await state.update_data(
         dist=template.dist,
         splits=[],
         idx=0,
         stroke=template.stroke,
         template_id=template.template_id,
+        segments=[float(seg) for seg in segs],
     )
     await state.set_state(AddResult.collect)
     hint = f"💡 {template.hint}" if template.hint else ""
+    segments_line = " + ".join(f"{seg:g} м" for seg in segs)
     await cb.message.answer(
-        "✅ Обрано шаблон «{title}».\n{hint}\n{prompt}".format(
+        "✅ Обрано шаблон «{title}».\n{hint}\nРозбивка: {segments}\n{prompt}".format(
             title=template.title,
             hint=hint,
+            segments=segments_line,
             prompt=_segment_prompt(0, segs[0]),
         )
     )
@@ -415,7 +393,8 @@ async def dist_chosen(message: types.Message, state: FSMContext) -> None:
         return await message.reply("❗ Дистанція має бути числом у метрах. Приклад: 75")
     if dist <= 0:
         return await message.reply("❗ Дистанція має бути більшою за нуль.")
-    await state.update_data(dist=dist, splits=[], idx=0)
+    segments = get_segments(dist)
+    await state.update_data(dist=dist, splits=[], idx=0, segments=segments)
     await message.answer(
         f"Дистанція {dist} м. Оберіть стиль:", reply_markup=get_stroke_keyboard()
     )
@@ -432,8 +411,10 @@ async def stroke_chosen(
     await state.update_data(stroke=callback_data.stroke)
     data = await state.get_data()
     dist = data["dist"]
-    segs = get_segments(dist)
-    await cb.message.answer(_segment_prompt(0, segs[0]))
+    segments = data.get("segments") or get_segments(dist)
+    segments_list = list(float(seg) for seg in segments)
+    await state.update_data(segments=segments_list)
+    await cb.message.answer(_segment_prompt(0, segments_list[0]))
     await state.set_state(AddResult.collect)
 
 
@@ -444,16 +425,19 @@ async def collect(message: types.Message, state: FSMContext) -> None:
     data = await state.get_data()
     athlete_id = data.get("athlete_id", message.from_user.id)
     dist, idx, splits = data["dist"], data["idx"], data["splits"]
-    segs = get_segments(dist)
+    raw_segments = data.get("segments") or get_segments(dist)
+    segments = [float(seg) for seg in raw_segments]
+    if data.get("segments") != segments:
+        await state.update_data(segments=segments)
     try:
         t = parse_time(message.text)
     except Exception:
         return await message.reply("❗ Невірний формат. Приклади: 0:32.45 або 32.45")
     splits.append(t)
     await state.update_data(splits=splits)
-    if idx + 1 < len(segs):
+    if idx + 1 < len(segments):
         await state.update_data(idx=idx + 1)
-        await message.answer(_segment_prompt(idx + 1, segs[idx + 1]))
+        await message.answer(_segment_prompt(idx + 1, segments[idx + 1]))
         return
     await state.set_state(AddResult.waiting_for_comment)
     await message.answer(
@@ -537,7 +521,9 @@ async def repeat_previous(
 
     await cb.message.answer(txt, parse_mode="HTML", reply_markup=keyboard)
 
-    analysis_text = _analysis_text(dist, payload["splits"], total)
+    analysis_text = _analysis_text(
+        dist, payload["splits"], total, payload.get("segments")
+    )
     await cb.message.answer(analysis_text, parse_mode="HTML")
 
     payload.update(timestamp=timestamp, comment="")
