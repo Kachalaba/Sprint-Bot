@@ -51,6 +51,49 @@ async def send_progress_chart(message, dates, values):
     )
 ```
 
+## Система уведомлений
+
+Sprint-Bot надсилає автоматичні нагадування про нові спринти та повідомляє про
+додавання результатів. Користувачі можуть керувати підпискою командами
+`/notify_on`, `/notify_off` та переглядати розклад `/notify_info`.
+
+Базова логіка побудована на асинхронному сервісі `NotificationService`, який
+запускається разом із диспетчером aiogram:
+
+```python
+notification_service = NotificationService(bot)
+
+dp.startup.register(notification_service.startup)
+dp.shutdown.register(notification_service.shutdown)
+
+await dp.start_polling(bot, notifications=notification_service)
+```
+
+Сервіс вміє планувати чергове нагадування, формувати текст розсилки та
+розповсюджувати push-повідомлення лише серед підписаних чатів:
+
+```python
+next_run = notification_service.next_sprint_run()
+await notification_service.broadcast_text(
+    f"⏱ Наступний спринт: {next_run:%d.%m о %H:%M}"
+)
+```
+
+Після збереження нового результату бот одразу повідомляє команду про зміни:
+
+```python
+await notification_service.notify_new_result(
+    actor_id=coach.id,
+    actor_name=coach.full_name,
+    athlete_id=athlete_id,
+    athlete_name=athlete_name,
+    dist=dist,
+    total=total,
+    timestamp=timestamp,
+    new_prs=new_prs,
+)
+```
+
 ## Установка и запуск
 1. Клонируйте репозиторий:
    ```bash
