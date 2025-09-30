@@ -21,7 +21,9 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 
-def _chunked(iterable: Iterable[InlineKeyboardButton], size: int = 2) -> list[list[InlineKeyboardButton]]:
+def _chunked(
+    iterable: Iterable[InlineKeyboardButton], size: int = 2
+) -> list[list[InlineKeyboardButton]]:
     """Split buttons into rows of given size."""
 
     row: list[InlineKeyboardButton] = []
@@ -78,7 +80,9 @@ def _build_athletes_keyboard(records: list[dict]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=_chunked(buttons, size=2))
 
 
-def _parse_results(raw_rows: list[list[str]], athlete_id: str) -> dict[int, list[tuple[datetime, float]]]:
+def _parse_results(
+    raw_rows: list[list[str]], athlete_id: str
+) -> dict[int, list[tuple[datetime, float]]]:
     """Group athlete results by distance."""
 
     grouped: dict[int, list[tuple[datetime, float]]] = defaultdict(list)
@@ -101,7 +105,9 @@ def _parse_results(raw_rows: list[list[str]], athlete_id: str) -> dict[int, list
     return grouped
 
 
-def _build_progress_plot(distances: dict[int, list[tuple[datetime, float]]], athlete_name: str) -> bytes:
+def _build_progress_plot(
+    distances: dict[int, list[tuple[datetime, float]]], athlete_name: str
+) -> bytes:
     """Render progress plot and return PNG bytes."""
 
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -133,7 +139,9 @@ async def cmd_progress(message: types.Message) -> None:
         records = ws_athletes.get_all_records()
     except Exception as exc:  # pragma: no cover - depends on external service
         logger.error("Failed to load athletes: %%s", exc, exc_info=True)
-        await message.answer("Не вдалося отримати список спортсменів. Спробуйте пізніше.")
+        await message.answer(
+            "Не вдалося отримати список спортсменів. Спробуйте пізніше."
+        )
         return
 
     if not records:
@@ -146,7 +154,9 @@ async def cmd_progress(message: types.Message) -> None:
         await message.answer("Не знайдено жодного валідного спортсмена у таблиці.")
         return
 
-    await message.answer("Оберіть спортсмена для перегляду прогресу:", reply_markup=keyboard)
+    await message.answer(
+        "Оберіть спортсмена для перегляду прогресу:", reply_markup=keyboard
+    )
 
 
 @router.callback_query(F.data.startswith("progress_select_"))

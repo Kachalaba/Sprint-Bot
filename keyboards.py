@@ -35,6 +35,14 @@ class RepeatCB(CallbackData, prefix="repeat"):
     athlete_id: int
 
 
+class CommentCB(CallbackData, prefix="comment"):
+    """Callback factory for comment management."""
+
+    action: str
+    ts: str
+    athlete_id: int
+
+
 # --- Reply Keyboards ---
 
 main_keyboard = ReplyKeyboardMarkup(
@@ -157,6 +165,55 @@ def get_repeat_keyboard(athlete_id: int) -> InlineKeyboardMarkup:
                     callback_data=RepeatCB(athlete_id=athlete_id).pack(),
                 )
             ]
+        ]
+    )
+
+
+def pack_timestamp_for_callback(timestamp: str) -> str:
+    """Convert timestamp to callback-friendly format."""
+
+    return timestamp.replace(" ", "_")
+
+
+def unpack_timestamp_from_callback(raw: str) -> str:
+    """Restore original timestamp from callback data."""
+
+    return raw.replace("_", " ")
+
+
+def get_comment_prompt_keyboard() -> InlineKeyboardMarkup:
+    """Keyboard offering to skip comment input."""
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Пропустити", callback_data="comment_skip")]
+        ]
+    )
+
+
+def get_result_actions_keyboard(
+    athlete_id: int, timestamp: str, has_comment: bool
+) -> InlineKeyboardMarkup:
+    """Keyboard with comment management and repeat actions."""
+
+    packed_ts = pack_timestamp_for_callback(timestamp)
+    comment_text = "✏️ Редагувати нотатку" if has_comment else "📝 Додати нотатку"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=comment_text,
+                    callback_data=CommentCB(
+                        action="edit", ts=packed_ts, athlete_id=athlete_id
+                    ).pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔁 Повторити попередній результат",
+                    callback_data=RepeatCB(athlete_id=athlete_id).pack(),
+                )
+            ],
         ]
     )
 

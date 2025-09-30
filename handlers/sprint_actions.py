@@ -18,18 +18,23 @@ from datetime import datetime, timezone
 from typing import Any, Iterable
 
 from aiogram import F, Router, types
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from keyboards import (
+    CommentCB,
     DistanceCB,
     RepeatCB,
     StrokeCB,
     TemplateCB,
+    get_comment_prompt_keyboard,
     get_distance_keyboard,
-    get_repeat_keyboard,
+    get_result_actions_keyboard,
     get_stroke_keyboard,
     get_template_keyboard,
+    pack_timestamp_for_callback,
+    unpack_timestamp_from_callback,
 )
 from services import ADMIN_IDS, ws_athletes, ws_log, ws_pr, ws_results
 from utils import AddResult, fmt_time, get_segments, parse_time, pr_key, speed
@@ -84,6 +89,67 @@ TEMPLATE_MAP = {template.template_id: template for template in SPRINT_TEMPLATES}
 # (coach_id, athlete_id) -> stored data for quick repeat
 LAST_RESULTS: dict[tuple[int, int], dict[str, Any]] = {}
 
+COMMENT_COLUMN_INDEX = 8
+
+
+def _normalize_comment(comment: str | None) -> str:
+    """Return trimmed comment or empty string."""
+
+    if not comment:
+        return ""
+    return comment.strip()
+
+
+def _find_result_row(athlete_id: int, timestamp: str) -> int:
+    """Return worksheet row index for result with provided timestamp."""
+
+    rows = ws_results.get_all_values()
+    for idx, row in enumerate(rows, start=1):
+        if len(row) < 5:
+            continue
+        if str(row[0]) != str(athlete_id):
+            continue
+        if row[4] == timestamp:
+            return idx
+    raise ValueError("Result row not found")
+
+
+def _update_comment(athlete_id: int, timestamp: str, comment: str | None) -> None:
+    """Persist comment for the given result."""
+
+    normalized = _normalize_comment(comment)
+    row_idx = _find_result_row(athlete_id, timestamp)
+    ws_results.update_cell(row_idx, COMMENT_COLUMN_INDEX, normalized)
+
+
+def _sync_last_results(timestamp: str, comment: str) -> None:
+    """Update cached last results with a new comment value."""
+
+    for payload in LAST_RESULTS.values():
+        if payload.get("timestamp") == timestamp:
+            payload["comment"] = comment
+
+
+def _build_comment_edit_keyboard(
+    timestamp: str, athlete_id: int
+) -> InlineKeyboardMarkup:
+    """Return keyboard with comment edit actions."""
+
+    packed = pack_timestamp_for_callback(timestamp)
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🗑 Видалити нотатку",
+                    callback_data=CommentCB(
+                        action="clear", ts=packed, athlete_id=athlete_id
+                    ).pack(),
+                )
+            ],
+            [InlineKeyboardButton(text="⬅️ Скасувати", callback_data="comment_cancel")],
+        ]
+    )
+
 
 def _segment_prompt(idx: int, length: float) -> str:
     """Return formatted prompt for segment input."""
@@ -101,6 +167,7 @@ def _persist_result(
     stroke: str,
     dist: int,
     splits: Iterable[float],
+    comment: str | None = None,
 ) -> tuple[float, list[tuple[int, float]], str]:
     """Save result to Google Sheets and return totals."""
 
@@ -117,6 +184,7 @@ def _persist_result(
             timestamp,
             json.dumps(splits_list),
             total,
+            _normalize_comment(comment),
         ]
     )
     ws_log.append_row([athlete_id, timestamp, "ADD", json.dumps(splits_list)])
@@ -160,6 +228,75 @@ def _analysis_text(dist: int, splits: list[float], total: float) -> str:
         f"• Темп: {pace:.1f} сек/100 м\n"
         f"• Деградація темпу: {degradation:.1f}%"
     )
+
+
+async def _finalize_result_entry(
+    target: types.Message,
+    actor: types.User,
+    state: FSMContext,
+    comment: str | None,
+) -> None:
+    """Persist result and share summary with optional comment."""
+
+    data = await state.get_data()
+    splits: list[float] = list(data.get("splits", []))
+    if not splits:
+        await state.clear()
+        await target.answer("Немає даних для збереження. Почніть заново.")
+        return
+
+    athlete_id = data.get("athlete_id", actor.id)
+    stroke = data.get("stroke", "freestyle")
+    dist = data["dist"]
+    comment_clean = _normalize_comment(comment)
+
+    await state.clear()
+
+    try:
+        total, new_prs, timestamp = _persist_result(
+            athlete_id,
+            actor.full_name,
+            stroke,
+            dist,
+            splits,
+            comment=comment_clean,
+        )
+    except Exception as exc:
+        logging.error("Failed to save result to Google Sheets: %s", exc, exc_info=True)
+        await target.answer("Помилка при збереженні результату. Спробуйте пізніше.")
+        return
+
+    summary = (
+        f"✅ Збережено! Загальий час <b>{fmt_time(total)}</b>\n"
+        f"Середня швидкість {speed(dist, total):.2f} м/с"
+    )
+    if new_prs:
+        summary += "\n" + "\n".join(
+            f"🥳 Новий PR сегменту #{i+1}: {fmt_time(t)}" for i, t in new_prs
+        )
+    if comment_clean:
+        summary += f"\n📝 Нотатка: {comment_clean}"
+
+    keyboard = get_result_actions_keyboard(
+        athlete_id=athlete_id,
+        timestamp=timestamp,
+        has_comment=bool(comment_clean),
+    )
+
+    await target.answer(summary, parse_mode="HTML", reply_markup=keyboard)
+
+    analysis_text = _analysis_text(dist, splits, total)
+    await target.answer(analysis_text, parse_mode="HTML")
+
+    LAST_RESULTS[(actor.id, athlete_id)] = {
+        "athlete_id": athlete_id,
+        "athlete_name": actor.full_name,
+        "stroke": stroke,
+        "dist": dist,
+        "splits": list(splits),
+        "timestamp": timestamp,
+        "comment": comment_clean,
+    }
 
 
 @router.callback_query(F.data == "add")
@@ -298,49 +435,31 @@ async def collect(message: types.Message, state: FSMContext) -> None:
     except Exception:
         return await message.reply("❗ Невірний формат. Приклади: 0:32.45 або 32.45")
     splits.append(t)
+    await state.update_data(splits=splits)
     if idx + 1 < len(segs):
-        await state.update_data(idx=idx + 1, splits=splits)
+        await state.update_data(idx=idx + 1)
         await message.answer(_segment_prompt(idx + 1, segs[idx + 1]))
         return
-    await state.clear()
-    stroke = data.get("stroke", "freestyle")
-    try:
-        total, new_prs, _ = _persist_result(
-            athlete_id,
-            message.from_user.full_name,
-            stroke,
-            dist,
-            splits,
-        )
-    except Exception as exc:
-        logging.error("Failed to save result to Google Sheets: %s", exc, exc_info=True)
-        return await message.answer(
-            "Помилка при збереженні результату. Спробуйте пізніше."
-        )
-    txt = (
-        f"✅ Збережено! Загальий час <b>{fmt_time(total)}</b>\n"
-        f"Середня швидкість {speed(dist, total):.2f} м/с"
-    )
-    if new_prs:
-        txt += "\n" + "\n".join(
-            f"🥳 Новий PR сегменту #{i+1}: {fmt_time(t)}" for i, t in new_prs
-        )
+    await state.set_state(AddResult.waiting_for_comment)
     await message.answer(
-        txt,
-        parse_mode="HTML",
-        reply_markup=get_repeat_keyboard(athlete_id),
+        "Хочете додати нотатку до результату? Надішліть текст або натисніть «Пропустити».",
+        reply_markup=get_comment_prompt_keyboard(),
     )
 
-    analysis_text = _analysis_text(dist, splits, total)
-    await message.answer(analysis_text, parse_mode="HTML")
 
-    LAST_RESULTS[(message.from_user.id, athlete_id)] = {
-        "athlete_id": athlete_id,
-        "athlete_name": message.from_user.full_name,
-        "stroke": stroke,
-        "dist": dist,
-        "splits": list(splits),
-    }
+@router.message(AddResult.waiting_for_comment)
+async def comment_received(message: types.Message, state: FSMContext) -> None:
+    """Save result together with supplied comment."""
+
+    await _finalize_result_entry(message, message.from_user, state, message.text)
+
+
+@router.callback_query(F.data == "comment_skip", AddResult.waiting_for_comment)
+async def comment_skipped(cb: types.CallbackQuery, state: FSMContext) -> None:
+    """Finalize result without comment."""
+
+    await cb.answer("Без нотатки")
+    await _finalize_result_entry(cb.message, cb.from_user, state, None)
 
 
 @router.callback_query(RepeatCB.filter())
@@ -355,12 +474,13 @@ async def repeat_previous(cb: types.CallbackQuery, callback_data: RepeatCB) -> N
 
     await cb.answer()
     try:
-        total, new_prs, _ = _persist_result(
+        total, new_prs, timestamp = _persist_result(
             payload["athlete_id"],
             payload["athlete_name"],
             payload["stroke"],
             payload["dist"],
             payload["splits"],
+            comment=None,
         )
     except Exception as exc:
         logging.error("Failed to repeat result: %s", exc, exc_info=True)
@@ -380,14 +500,174 @@ async def repeat_previous(cb: types.CallbackQuery, callback_data: RepeatCB) -> N
             f"🥳 Новий PR сегменту #{i+1}: {fmt_time(t)}" for i, t in new_prs
         )
 
-    await cb.message.answer(
-        txt,
-        parse_mode="HTML",
-        reply_markup=get_repeat_keyboard(payload["athlete_id"]),
+    keyboard = get_result_actions_keyboard(
+        athlete_id=payload["athlete_id"],
+        timestamp=timestamp,
+        has_comment=False,
     )
+
+    await cb.message.answer(txt, parse_mode="HTML", reply_markup=keyboard)
 
     analysis_text = _analysis_text(dist, payload["splits"], total)
     await cb.message.answer(analysis_text, parse_mode="HTML")
+
+    payload.update(timestamp=timestamp, comment="")
+
+
+@router.callback_query(CommentCB.filter(F.action == "edit"))
+async def comment_edit(
+    cb: types.CallbackQuery, callback_data: CommentCB, state: FSMContext
+) -> None:
+    """Prompt user to edit comment for a saved result."""
+
+    timestamp = unpack_timestamp_from_callback(callback_data.ts)
+    athlete_id = callback_data.athlete_id
+
+    try:
+        row_idx = _find_result_row(athlete_id, timestamp)
+    except ValueError:
+        await cb.answer("Результат не знайдено", show_alert=True)
+        return
+
+    try:
+        current_comment = ws_results.cell(row_idx, COMMENT_COLUMN_INDEX).value or ""
+    except Exception as exc:
+        logging.error("Failed to load comment: %s", exc, exc_info=True)
+        await cb.answer("Не вдалося завантажити нотатку", show_alert=True)
+        return
+
+    await state.set_state(AddResult.editing_comment)
+    await state.update_data(
+        edit_timestamp=timestamp,
+        edit_athlete_id=athlete_id,
+    )
+
+    message_lines = ["Надішліть нову нотатку для результату."]
+    if current_comment.strip():
+        message_lines.append(f"Поточна нотатка: {current_comment.strip()}")
+    else:
+        message_lines.append("Зараз нотатки немає.")
+
+    await cb.message.answer(
+        "\n".join(message_lines),
+        reply_markup=_build_comment_edit_keyboard(timestamp, athlete_id),
+    )
+    await cb.answer()
+
+
+@router.message(AddResult.editing_comment)
+async def save_comment_edit(message: types.Message, state: FSMContext) -> None:
+    """Handle new comment text for existing result."""
+
+    data = await state.get_data()
+    timestamp = data.get("edit_timestamp")
+    athlete_id = data.get("edit_athlete_id")
+    if not timestamp or not athlete_id:
+        await state.clear()
+        await message.answer(
+            "Не вдалося визначити результат. Спробуйте з меню історії."
+        )
+        return
+
+    try:
+        _update_comment(athlete_id, timestamp, message.text)
+    except ValueError:
+        await state.clear()
+        await message.answer("Результат не знайдено. Спробуйте оновити історію.")
+        return
+    except Exception as exc:
+        await state.clear()
+        logging.error("Failed to update comment: %s", exc, exc_info=True)
+        await message.answer("Не вдалося зберегти нотатку. Спробуйте пізніше.")
+        return
+
+    comment_clean = _normalize_comment(message.text)
+    _sync_last_results(timestamp, comment_clean)
+    await state.clear()
+    await message.answer("Нотатку оновлено.")
+
+
+@router.callback_query(CommentCB.filter(F.action == "clear"))
+async def clear_comment(
+    cb: types.CallbackQuery, callback_data: CommentCB, state: FSMContext
+) -> None:
+    """Remove comment from existing result."""
+
+    timestamp = unpack_timestamp_from_callback(callback_data.ts)
+    athlete_id = callback_data.athlete_id
+
+    try:
+        _update_comment(athlete_id, timestamp, None)
+    except ValueError:
+        await cb.answer("Результат не знайдено", show_alert=True)
+        return
+    except Exception as exc:
+        logging.error("Failed to clear comment: %s", exc, exc_info=True)
+        await cb.answer("Не вдалося видалити нотатку", show_alert=True)
+        return
+
+    _sync_last_results(timestamp, "")
+    await state.clear()
+    await cb.message.answer("Нотатку видалено.")
+    await cb.answer()
+
+
+@router.callback_query(F.data == "comment_cancel")
+async def cancel_comment_edit(cb: types.CallbackQuery, state: FSMContext) -> None:
+    """Cancel comment editing flow."""
+
+    await state.clear()
+    await cb.answer("Скасовано")
+    await cb.message.answer("Редагування нотатки скасовано.")
+
+
+@router.message(Command("results"))
+async def cmd_results(message: types.Message) -> None:
+    """Show latest results together with comments."""
+
+    try:
+        rows = ws_results.get_all_values()
+    except Exception as exc:
+        logging.error("Failed to load results: %s", exc, exc_info=True)
+        await message.answer("Не вдалося завантажити результати. Спробуйте пізніше.")
+        return
+
+    if len(rows) <= 1:
+        await message.answer("Поки немає збережених результатів.")
+        return
+
+    user_id = str(message.from_user.id)
+    user_rows = [row for row in rows[1:] if row and str(row[0]) == user_id]
+    if not user_rows:
+        await message.answer("Для вас ще немає зафіксованих результатів.")
+        return
+
+    latest = list(reversed(user_rows[-5:]))
+    blocks: list[str] = []
+    for row in latest:
+        try:
+            dist = int(row[3])
+            timestamp = row[4]
+            total = float(str(row[6]).replace(",", "."))
+            splits = json.loads(row[5]) if row[5] else []
+        except (ValueError, json.JSONDecodeError, IndexError) as exc:
+            logging.warning("Skipping malformed result row: %s (%s)", row, exc)
+            continue
+
+        block_lines = [f"<b>{timestamp}</b> — {dist} м, час {fmt_time(total)}"]
+        comment = row[7].strip() if len(row) > 7 else ""
+        if comment:
+            block_lines.append(f"📝 {comment}")
+        if splits:
+            block_lines.append(
+                "Спліти: " + " • ".join(fmt_time(float(value)) for value in splits)
+            )
+        blocks.append("\n".join(block_lines))
+
+    await message.answer(
+        "\n\n".join(blocks) if blocks else "Не вдалося зчитати результати.",
+        parse_mode="HTML",
+    )
 
 
 @router.callback_query(F.data == "history")
@@ -417,6 +697,9 @@ async def history(cb: types.CallbackQuery) -> None:
                             out.append(
                                 f"  - Відрізок {i+1}: {fmt_time(float(t))} (ПОМИЛКА: зайвий відрізок)"
                             )
+
+                    if len(row) > 7 and row[7].strip():
+                        out.append(f"  📝 Нотатка: {row[7].strip()}")
 
                     out.append("-" * 20)
                     processed_count += 1
