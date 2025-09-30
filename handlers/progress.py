@@ -9,8 +9,7 @@ from typing import Iterable
 import matplotlib
 from aiogram import F, Router, types
 from aiogram.filters import Command
-from aiogram.types import (BufferedInputFile, InlineKeyboardButton,
-                           InlineKeyboardMarkup)
+from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 
 from role_service import ROLE_ATHLETE, RoleService
 from services import ws_athletes, ws_results

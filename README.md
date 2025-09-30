@@ -11,6 +11,37 @@ Sprint-Bot — Telegram-бот на основе **Python** и **aiogram 3**, п
 - двосторонній чат між тренерами та спортсменами для швидкої комунікації.
 - автоматизовані резервні копії SQLite-бази та відновлення з хмарного сховища.
 
+## Шаблони спринтів
+
+Тренери можуть заздалегідь зберегти улюблені розбивки дистанції та швидко
+запускати нові спринти за кілька тапів. Меню `/templates` дозволяє створювати,
+редагувати та видаляти шаблони з кастомним набором відрізків.
+
+```python
+from template_service import TemplateService
+
+
+async def demo_template_usage() -> None:
+    service = TemplateService()
+    await service.init()
+
+    template = await service.create_template(
+        title="⚡️ 75 м спринт",
+        dist=75,
+        stroke="freestyle",
+        hint="Початок на максимумі, далі рівний темп",
+        segments=(25, 25, 25),
+    )
+
+    templates = await service.list_templates()
+    selected = await service.get_template(template.template_id)
+
+    print(selected.title, selected.segments_or_default())
+```
+
+Під час додавання результату бот показує клавіатуру з шаблонами та підказкою по
+відрізках, а система зберігає обрані сегменти для аналізу швидкості.
+
 ## Технологии
 - Python 3;
 - библиотека aiogram 3 для работы с Telegram API;

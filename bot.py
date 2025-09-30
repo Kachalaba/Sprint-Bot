@@ -20,9 +20,11 @@ from handlers.notifications import router as notifications_router
 from handlers.progress import router as progress_router
 from handlers.registration import router as registration_router
 from handlers.sprint_actions import router as sprint_router
+from handlers.templates import router as templates_router
 from notifications import NotificationService
 from role_service import RoleService
 from services import ADMIN_IDS, bot
+from template_service import TemplateService
 
 LOG_DIR = "logs"
 LOG_FILE = os.path.join(LOG_DIR, "bot.log")
@@ -86,6 +88,7 @@ def setup_dispatcher(
     dp.include_router(admin_router)
     dp.include_router(progress_router)
     dp.include_router(sprint_router)
+    dp.include_router(templates_router)
     dp.include_router(messages_router)
     dp.include_router(notifications_router)
     dp.include_router(backup_router)
@@ -106,6 +109,8 @@ async def main() -> None:
     admin_chat_ids = _parse_admin_chat_ids()
     role_service = RoleService()
     await role_service.init(admin_ids=admin_chat_ids)
+    template_service = TemplateService()
+    await template_service.init()
     backup_service = BackupService(
         bot=bot,
         db_path=Path(os.getenv("CHAT_DB_PATH", DB_PATH)),
@@ -123,6 +128,7 @@ async def main() -> None:
         chat_service=chat_service,
         backup_service=backup_service,
         role_service=role_service,
+        template_service=template_service,
     )
 
 
