@@ -15,6 +15,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from html import escape
 from typing import Any, Iterable
 
 from aiogram import F, Router, types
@@ -99,6 +100,12 @@ def _normalize_comment(comment: str | None) -> str:
     if not comment:
         return ""
     return comment.strip()
+
+
+def _escape_comment(comment: str) -> str:
+    """Return HTML-safe representation of comment."""
+
+    return escape(comment, quote=False)
 
 
 def _find_result_row(athlete_id: int, timestamp: str) -> int:
@@ -277,7 +284,7 @@ async def _finalize_result_entry(
             f"🥳 Новий PR сегменту #{i+1}: {fmt_time(t)}" for i, t in new_prs
         )
     if comment_clean:
-        summary += f"\n📝 Нотатка: {comment_clean}"
+        summary += f"\n📝 Нотатка: {_escape_comment(comment_clean)}"
 
     keyboard = get_result_actions_keyboard(
         athlete_id=athlete_id,
@@ -695,7 +702,7 @@ async def cmd_results(message: types.Message) -> None:
         block_lines = [f"<b>{timestamp}</b> — {dist} м, час {fmt_time(total)}"]
         comment = row[7].strip() if len(row) > 7 else ""
         if comment:
-            block_lines.append(f"📝 {comment}")
+            block_lines.append(f"📝 {_escape_comment(comment)}")
         if splits:
             block_lines.append(
                 "Спліти: " + " • ".join(fmt_time(float(value)) for value in splits)
@@ -737,7 +744,7 @@ async def history(cb: types.CallbackQuery) -> None:
                             )
 
                     if len(row) > 7 and row[7].strip():
-                        out.append(f"  📝 Нотатка: {row[7].strip()}")
+                        out.append(f"  📝 Нотатка: {_escape_comment(row[7].strip())}")
 
                     out.append("-" * 20)
                     processed_count += 1
