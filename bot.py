@@ -7,8 +7,10 @@ from logging.handlers import RotatingFileHandler
 
 from aiogram import Dispatcher
 
+from chat_service import ChatService
 from handlers.common import router as common_router
 from handlers.error_handler import router as error_router
+from handlers.messages import router as messages_router
 from handlers.notifications import router as notifications_router
 from handlers.progress import router as progress_router
 from handlers.registration import router as registration_router
@@ -44,6 +46,7 @@ def setup_dispatcher(notification_service: NotificationService) -> Dispatcher:
     dp.include_router(common_router)
     dp.include_router(progress_router)
     dp.include_router(sprint_router)
+    dp.include_router(messages_router)
     dp.include_router(notifications_router)
     dp.include_router(error_router)
     dp.startup.register(notification_service.startup)
@@ -55,8 +58,14 @@ async def main() -> None:
     """Start Sprint Bot."""
     logger.info("[SprintBot] starting…")
     notification_service = NotificationService(bot=bot)
+    chat_service = ChatService()
+    await chat_service.init()
     dp = setup_dispatcher(notification_service)
-    await dp.start_polling(bot, notifications=notification_service)
+    await dp.start_polling(
+        bot,
+        notifications=notification_service,
+        chat_service=chat_service,
+    )
 
 
 if __name__ == "__main__":

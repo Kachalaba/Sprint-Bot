@@ -1,6 +1,7 @@
 import logging
 import os
 from functools import lru_cache
+from typing import Optional
 
 import gspread
 from aiogram import Bot
@@ -53,3 +54,34 @@ def get_all_sportsmen() -> list[str]:
     except Exception as e:
         logging.error(f"Failed to get sportsmen list from Google Sheets: {e}")
         return []
+
+
+def get_registered_athletes() -> list[tuple[int, str]]:
+    """Return registered athletes as tuples of (telegram_id, name)."""
+
+    try:
+        rows = ws_athletes.get_all_values()
+    except Exception as e:
+        logging.error("Failed to fetch athletes: %s", e)
+        return []
+
+    athletes: list[tuple[int, str]] = []
+    for raw in rows[1:]:
+        if not raw:
+            continue
+        try:
+            athlete_id = int(raw[0])
+        except (ValueError, TypeError, IndexError):
+            continue
+        name = raw[1] if len(raw) > 1 and raw[1] else "Без імені"
+        athletes.append((athlete_id, name))
+    return athletes
+
+
+def get_athlete_name(athlete_id: int) -> Optional[str]:
+    """Return athlete name by telegram id if registered."""
+
+    for uid, name in get_registered_athletes():
+        if uid == athlete_id:
+            return name
+    return None

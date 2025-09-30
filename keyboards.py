@@ -225,6 +225,7 @@ def get_main_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="Стаєр", callback_data="menu_stayer")],
         [InlineKeyboardButton(text="Історія", callback_data="menu_history")],
         [InlineKeyboardButton(text="Рекорди", callback_data="menu_records")],
+        [InlineKeyboardButton(text="💬 Повідомлення", callback_data="menu_messages")],
     ]
     if is_admin:
         buttons.append(
