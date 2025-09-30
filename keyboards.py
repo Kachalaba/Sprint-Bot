@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 
 from typing import Iterable
 
@@ -182,8 +183,11 @@ def unpack_timestamp_from_callback(raw: str) -> str:
     """Restore original timestamp from callback data."""
 
     padding = "=" * (-len(raw) % 4)
-    decoded = base64.urlsafe_b64decode((raw + padding).encode("ascii"))
-    return decoded.decode("utf-8")
+    try:
+        decoded = base64.urlsafe_b64decode((raw + padding).encode("ascii"))
+        return decoded.decode("utf-8")
+    except (binascii.Error, ValueError, UnicodeDecodeError):
+        return raw.replace("_", " ")
 
 
 def get_comment_prompt_keyboard() -> InlineKeyboardMarkup:
