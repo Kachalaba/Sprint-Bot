@@ -12,6 +12,8 @@ class AddResult(StatesGroup):
     waiting_for_stroke = State()
     collect = State()
     choose_athlete = State()
+    waiting_for_comment = State()
+    editing_comment = State()
 
 
 # --- Utility Functions ---

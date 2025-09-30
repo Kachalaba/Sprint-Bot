@@ -9,8 +9,8 @@ from aiogram import Dispatcher
 
 from handlers.common import router as common_router
 from handlers.error_handler import router as error_router
-from handlers.registration import router as registration_router
 from handlers.progress import router as progress_router
+from handlers.registration import router as registration_router
 from handlers.sprint_actions import router as sprint_router
 from services import bot
 
