@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Iterable
+
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import (
     InlineKeyboardButton,
@@ -11,6 +15,24 @@ from aiogram.types import (
 
 class StrokeCB(CallbackData, prefix="stroke"):
     stroke: str
+
+
+class DistanceCB(CallbackData, prefix="dist"):
+    """Callback factory for choosing a sprint distance."""
+
+    value: int
+
+
+class TemplateCB(CallbackData, prefix="tpl"):
+    """Callback factory for sprint templates."""
+
+    template_id: str
+
+
+class RepeatCB(CallbackData, prefix="repeat"):
+    """Callback factory for repeating the previous result."""
+
+    athlete_id: int
 
 
 # --- Reply Keyboards ---
@@ -75,12 +97,68 @@ def get_sportsmen_keyboard(sportsmen: list) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[buttons])
 
 
-def get_distance_keyboard(distances: list) -> InlineKeyboardMarkup:
-    """Gets keyboard with distances."""
-    buttons = [
-        InlineKeyboardButton(text=f"{dist} м", callback_data=dist) for dist in distances
+def get_distance_keyboard() -> InlineKeyboardMarkup:
+    """Return keyboard with frequently used sprint distances."""
+
+    distance_buttons = [
+        [
+            InlineKeyboardButton(
+                text=f"{dist} м", callback_data=DistanceCB(value=dist).pack()
+            )
+            for dist in row
+        ]
+        for row in ((50, 100, 200), (400, 800, 1500))
     ]
-    return InlineKeyboardMarkup(inline_keyboard=[buttons])
+
+    extra_row = [
+        InlineKeyboardButton(text="📋 Шаблони", callback_data="choose_template"),
+        InlineKeyboardButton(text="✏️ Інша", callback_data="manual_distance"),
+    ]
+
+    return InlineKeyboardMarkup(inline_keyboard=distance_buttons + [extra_row])
+
+
+def get_template_keyboard(templates: Iterable[tuple[str, str]]) -> InlineKeyboardMarkup:
+    """Build keyboard with template choices."""
+
+    buttons: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+
+    for template_id, title in templates:
+        row.append(
+            InlineKeyboardButton(
+                text=title, callback_data=TemplateCB(template_id=template_id).pack()
+            )
+        )
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+
+    if row:
+        buttons.append(row)
+
+    buttons.append(
+        [
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_distance"),
+        ]
+    )
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_repeat_keyboard(athlete_id: int) -> InlineKeyboardMarkup:
+    """Return keyboard with repeat action."""
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🔁 Повторити попередній результат",
+                    callback_data=RepeatCB(athlete_id=athlete_id).pack(),
+                )
+            ]
+        ]
+    )
 
 
 def get_main_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
