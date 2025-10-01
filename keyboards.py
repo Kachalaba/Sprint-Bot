@@ -47,6 +47,13 @@ class CommentCB(CallbackData, prefix="comment"):
     athlete_id: int
 
 
+class AddWizardCB(CallbackData, prefix="aw"):
+    """Callback factory for add-result wizard actions."""
+
+    action: str
+    value: str = ""
+
+
 # --- Reply Keyboards ---
 
 main_keyboard = ReplyKeyboardMarkup(
@@ -199,6 +206,29 @@ def get_comment_prompt_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="Пропустити", callback_data="comment_skip")]
         ]
     )
+
+
+def wizard_cancel_button() -> InlineKeyboardButton:
+    """Return standard cancel button for the add wizard."""
+
+    return InlineKeyboardButton(
+        text="❌ Отмена", callback_data=AddWizardCB(action="cancel").pack()
+    )
+
+
+def wizard_navigation_row(back_target: str | None) -> list[InlineKeyboardButton]:
+    """Return navigation row with back and cancel buttons."""
+
+    buttons: list[InlineKeyboardButton] = []
+    if back_target:
+        buttons.append(
+            InlineKeyboardButton(
+                text="⬅️ Назад",
+                callback_data=AddWizardCB(action="back", value=back_target).pack(),
+            )
+        )
+    buttons.append(wizard_cancel_button())
+    return buttons
 
 
 def get_result_actions_keyboard(

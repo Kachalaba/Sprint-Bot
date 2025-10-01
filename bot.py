@@ -11,6 +11,7 @@ from aiogram import Dispatcher
 
 from backup_service import BackupService
 from chat_service import DB_PATH, ChatService
+from handlers.add_wizard import router as add_wizard_router
 from handlers.admin import router as admin_router
 from handlers.backup import router as backup_router
 from handlers.common import router as common_router
@@ -85,6 +86,7 @@ def setup_dispatcher(
     dp = Dispatcher()
     dp.include_router(registration_router)
     dp.include_router(common_router)
+    dp.include_router(add_wizard_router)
     dp.include_router(admin_router)
     dp.include_router(progress_router)
     dp.include_router(sprint_router)
