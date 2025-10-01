@@ -6,10 +6,9 @@ from aiogram import Router, types
 from aiogram.filters import Command
 from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
-from filters import RoleFilter
-from keyboards import get_main_keyboard
 from role_service import ROLE_ADMIN, ROLE_ATHLETE, ROLE_TRAINER, RoleService
 from services import ws_athletes
+from utils.roles import require_roles
 
 router = Router()
 
@@ -24,8 +23,8 @@ start_kb = ReplyKeyboardMarkup(
 )
 
 
-@router.message(Command("reg"), RoleFilter(ROLE_TRAINER, ROLE_ADMIN))
-@router.message(RoleFilter(ROLE_TRAINER, ROLE_ADMIN), lambda m: m.text == "Реєстрація")
+@router.message(Command("reg"), require_roles(ROLE_TRAINER, ROLE_ADMIN))
+@router.message(require_roles(ROLE_TRAINER, ROLE_ADMIN), lambda m: m.text == "Реєстрація")
 async def cmd_reg(message: types.Message) -> None:
     """Request athlete contact."""
     kb = ReplyKeyboardMarkup(
@@ -58,12 +57,3 @@ async def reg_contact(message: types.Message, role_service: RoleService) -> None
         f"✅ Спортсмен {contact.first_name} зареєстрований.",
         reply_markup=start_kb,
     )
-
-
-@router.message(Command("start"))
-@router.message(lambda m: m.text == "Старт")
-async def cmd_start(message: types.Message, role_service: RoleService) -> None:
-    """Show main menu."""
-    await role_service.upsert_user(message.from_user)
-    role = await role_service.get_role(message.from_user.id)
-    await message.answer("Оберіть розділ:", reply_markup=get_main_keyboard(role))

@@ -10,8 +10,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from filters import RoleFilter
 from role_service import ROLE_ADMIN, ROLE_ATHLETE, ROLE_TRAINER, RoleService
+from utils.roles import require_roles
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -57,8 +57,8 @@ async def _answer(
         await event.answer()
 
 
-@router.message(Command("admin"), RoleFilter(ROLE_ADMIN))
-@router.callback_query(RoleFilter(ROLE_ADMIN), F.data == "menu_admin")
+@router.message(Command("admin"), require_roles(ROLE_ADMIN))
+@router.callback_query(require_roles(ROLE_ADMIN), F.data == "menu_admin")
 async def open_admin_panel(
     event: types.Message | types.CallbackQuery, state: FSMContext
 ) -> None:
@@ -73,7 +73,7 @@ async def open_admin_panel(
     )
 
 
-@router.callback_query(RoleFilter(ROLE_ADMIN), F.data == "admin:users")
+@router.callback_query(require_roles(ROLE_ADMIN), F.data == "admin:users")
 async def list_users(cb: types.CallbackQuery, role_service: RoleService) -> None:
     """Display current users grouped by roles."""
 
@@ -94,7 +94,7 @@ async def list_users(cb: types.CallbackQuery, role_service: RoleService) -> None
     await cb.answer()
 
 
-@router.callback_query(RoleFilter(ROLE_ADMIN), F.data == "admin:set")
+@router.callback_query(require_roles(ROLE_ADMIN), F.data == "admin:set")
 async def ask_user_for_role(cb: types.CallbackQuery, state: FSMContext) -> None:
     """Ask admin to provide user id for role change."""
 
@@ -103,7 +103,7 @@ async def ask_user_for_role(cb: types.CallbackQuery, state: FSMContext) -> None:
     await cb.answer()
 
 
-@router.message(AdminStates.waiting_user_id, RoleFilter(ROLE_ADMIN))
+@router.message(AdminStates.waiting_user_id, require_roles(ROLE_ADMIN))
 async def select_role_target(
     message: types.Message, state: FSMContext, role_service: RoleService
 ) -> None:
@@ -136,7 +136,7 @@ async def select_role_target(
 
 @router.callback_query(
     AdminStates.waiting_role_choice,
-    RoleFilter(ROLE_ADMIN),
+    require_roles(ROLE_ADMIN),
     F.data.startswith("admin:role:"),
 )
 async def apply_role_change(
@@ -168,7 +168,7 @@ async def apply_role_change(
     await cb.answer()
 
 
-@router.callback_query(RoleFilter(ROLE_ADMIN), F.data == "admin:bind")
+@router.callback_query(require_roles(ROLE_ADMIN), F.data == "admin:bind")
 async def ask_athlete(cb: types.CallbackQuery, state: FSMContext) -> None:
     """Request athlete id to assign a trainer."""
 
@@ -177,7 +177,7 @@ async def ask_athlete(cb: types.CallbackQuery, state: FSMContext) -> None:
     await cb.answer()
 
 
-@router.message(AdminStates.waiting_athlete_id, RoleFilter(ROLE_ADMIN))
+@router.message(AdminStates.waiting_athlete_id, require_roles(ROLE_ADMIN))
 async def choose_trainer(
     message: types.Message, state: FSMContext, role_service: RoleService
 ) -> None:
@@ -219,7 +219,7 @@ async def choose_trainer(
 
 @router.callback_query(
     AdminStates.waiting_trainer_choice,
-    RoleFilter(ROLE_ADMIN),
+    require_roles(ROLE_ADMIN),
     F.data.startswith("admin:trainer:"),
 )
 async def apply_trainer_binding(

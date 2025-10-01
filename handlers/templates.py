@@ -230,6 +230,23 @@ async def templates_menu(
     await _show_list(message, template_service)
 
 
+@router.callback_query(F.data == "menu_templates")
+async def menu_templates(
+    cb: types.CallbackQuery,
+    state: FSMContext,
+    template_service: TemplateService,
+    role_service: RoleService,
+) -> None:
+    """Open templates menu from the main menu."""
+
+    if not await _is_manager(cb.from_user, role_service):
+        await cb.answer("Недостатньо прав", show_alert=True)
+        return
+    await state.clear()
+    await state.set_state(TemplateStates.menu)
+    await _show_list(cb, template_service)
+
+
 @router.callback_query(TemplateCB.filter())
 async def template_actions(
     cb: types.CallbackQuery,

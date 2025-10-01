@@ -16,12 +16,14 @@ from handlers.admin import router as admin_router
 from handlers.backup import router as backup_router
 from handlers.common import router as common_router
 from handlers.error_handler import router as error_router
+from handlers.menu import router as menu_router
 from handlers.messages import router as messages_router
 from handlers.notifications import router as notifications_router
 from handlers.progress import router as progress_router
 from handlers.registration import router as registration_router
 from handlers.sprint_actions import router as sprint_router
 from handlers.templates import router as templates_router
+from middlewares.roles import RoleMiddleware
 from notifications import NotificationService
 from role_service import RoleService
 from services import ADMIN_IDS, bot
@@ -85,6 +87,7 @@ def setup_dispatcher(
     """Configure dispatcher with routers."""
     dp = Dispatcher()
     dp.include_router(registration_router)
+    dp.include_router(menu_router)
     dp.include_router(common_router)
     dp.include_router(add_wizard_router)
     dp.include_router(admin_router)
@@ -124,6 +127,7 @@ async def main() -> None:
         endpoint_url=os.getenv("S3_ENDPOINT_URL") or None,
     )
     dp = setup_dispatcher(notification_service, backup_service)
+    dp.update.middleware(RoleMiddleware(role_service))
     await dp.start_polling(
         bot,
         notifications=notification_service,
