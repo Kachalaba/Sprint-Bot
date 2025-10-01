@@ -15,7 +15,7 @@ import html
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Iterable
+from typing import Any, Iterable, Sequence
 
 from aiogram import F, Router, types
 from aiogram.filters import Command
@@ -40,6 +40,7 @@ from notifications import NotificationService
 from role_service import ROLE_ATHLETE, ROLE_TRAINER, RoleService
 from services import ws_athletes, ws_log, ws_pr, ws_results
 from template_service import TemplateService
+from services.stats_service import SobStats, calc_segment_prs, calc_sob, calc_total_pr
 from utils import AddResult, fmt_time, get_segments, pr_key, speed
 from utils.parse_time import parse_splits, parse_total, validate_splits
 
@@ -127,6 +128,80 @@ def _segment_prompt(idx: int, length: float) -> str:
     )
 
 
+def _load_best_total(athlete_id: int, stroke: str, dist: int) -> float | None:
+    """Return previous best total time for athlete if available."""
+
+    try:
+        rows = ws_results.get_all_values()
+    except Exception as exc:  # pragma: no cover - network dependent
+        logging.warning("Failed to load previous totals: %s", exc, exc_info=True)
+        return None
+
+    best: float | None = None
+    for row in rows:
+        if not row or len(row) < 7:
+            continue
+        try:
+            uid = int(row[0])
+            row_stroke = str(row[2])
+            row_dist = int(row[3])
+            total_raw = row[6]
+        except (ValueError, IndexError, TypeError):
+            continue
+        if uid != athlete_id or row_stroke != stroke or row_dist != dist:
+            continue
+        try:
+            total_value = float(str(total_raw).replace(",", "."))
+        except (TypeError, ValueError):
+            continue
+        if best is None or total_value < best:
+            best = total_value
+    return best
+
+
+def _load_segment_bests(
+    athlete_id: int, stroke: str, dist: int
+) -> tuple[list[float | None], dict[int, int]]:
+    """Return stored best segment times and their worksheet rows."""
+
+    try:
+        rows = ws_pr.get_all_values()
+    except Exception as exc:  # pragma: no cover - network dependent
+        logging.warning("Failed to load segment PRs: %s", exc, exc_info=True)
+        return [], {}
+
+    values: dict[int, float] = {}
+    rows_map: dict[int, int] = {}
+    for row_idx, row in enumerate(rows, start=1):
+        if not row or len(row) < 2:
+            continue
+        key = row[0]
+        try:
+            uid_str, stroke_key, dist_str, seg_idx_str = key.split("|")
+            uid = int(uid_str)
+            seg_idx = int(seg_idx_str)
+            dist_val = int(dist_str)
+        except (ValueError, AttributeError):
+            continue
+        if uid != athlete_id or stroke_key != stroke or dist_val != dist:
+            continue
+        try:
+            value = float(str(row[1]).replace(",", "."))
+        except (TypeError, ValueError):
+            continue
+        values[seg_idx] = value
+        rows_map[seg_idx] = row_idx
+
+    if not values:
+        return [], rows_map
+
+    max_idx = max(values)
+    best_list: list[float | None] = [None] * (max_idx + 1)
+    for idx, value in values.items():
+        best_list[idx] = value
+    return best_list, rows_map
+
+
 def _persist_result(
     athlete_id: int,
     athlete_name: str,
@@ -134,13 +209,29 @@ def _persist_result(
     dist: int,
     splits: Iterable[float],
     comment: str | None = None,
-) -> tuple[float, list[tuple[int, float]], str]:
-    """Save result to Google Sheets and return totals."""
+) -> tuple[float, list[tuple[int, float]], str, dict[str, Any]]:
+    """Save result to Google Sheets and return totals with PR info."""
 
     splits_list = list(splits)
     total = sum(splits_list)
     validate_splits(total, splits_list)
     timestamp = datetime.now(timezone.utc).isoformat(sep=" ", timespec="seconds")
+
+    previous_total = _load_best_total(athlete_id, stroke, dist)
+    segment_bests, segment_rows = _load_segment_bests(athlete_id, stroke, dist)
+    total_stats = calc_total_pr(previous_total, total)
+    segment_flags = calc_segment_prs(segment_bests, splits_list)
+    sob_stats: SobStats = calc_sob(segment_bests, splits_list)
+
+    stats_payload: dict[str, Any] = {
+        "new_total_pr": total_stats.is_new,
+        "total_pr_delta": total_stats.delta,
+        "previous_total": total_stats.previous,
+        "segment_prs": segment_flags,
+        "sob_delta": sob_stats.delta,
+        "sob_previous": sob_stats.previous,
+        "sob_current": sob_stats.current,
+    }
 
     ws_results.append_row(
         [
@@ -157,20 +248,24 @@ def _persist_result(
     ws_log.append_row([athlete_id, timestamp, "ADD", json.dumps(splits_list)])
 
     new_prs: list[tuple[int, float]] = []
+    best_buffer = list(segment_bests)
+    if len(best_buffer) < len(splits_list):
+        best_buffer.extend([None] * (len(splits_list) - len(best_buffer)))
+
     for idx, seg_time in enumerate(splits_list):
         key = pr_key(athlete_id, stroke, dist, idx)
-        cell = ws_pr.find(key)
-        if not cell:
+        row_idx = segment_rows.get(idx)
+        current_best = best_buffer[idx] if idx < len(best_buffer) else None
+        if row_idx is None:
             ws_pr.append_row([key, seg_time, timestamp])
             new_prs.append((idx, seg_time))
             continue
+        if current_best is not None and seg_time >= current_best:
+            continue
+        ws_pr.update(f"A{row_idx}:C{row_idx}", [[key, seg_time, timestamp]])
+        new_prs.append((idx, seg_time))
 
-        old = float(ws_pr.cell(cell.row, 2).value.replace(",", "."))
-        if seg_time < old:
-            ws_pr.update(f"A{cell.row}:C{cell.row}", [[key, seg_time, timestamp]])
-            new_prs.append((idx, seg_time))
-
-    return total, new_prs, timestamp
+    return total, new_prs, timestamp, stats_payload
 
 
 def _analysis_text(
@@ -202,12 +297,49 @@ def _analysis_text(
     )
 
 
+def _format_result_summary(
+    dist: int,
+    total: float,
+    new_prs: Sequence[tuple[int, float]],
+    stats: dict[str, Any],
+    comment: str | None,
+) -> str:
+    """Compose short HTML summary for saved result."""
+
+    summary = (
+        f"✅ Збережено! Загальний час <b>{fmt_time(total)}</b>\n"
+        f"Середня швидкість {speed(dist, total):.2f} м/с"
+    )
+    if stats.get("new_total_pr"):
+        delta = stats.get("total_pr_delta") or 0.0
+        delta_suffix = f" (−{delta:.2f} с)" if delta else ""
+        summary += f"\n🏆 Новий загальний PR{delta_suffix}!"
+    if new_prs:
+        summary += "\n" + "\n".join(
+            f"🥳 Новий PR сегменту #{idx + 1}: {fmt_time(value)}"
+            for idx, value in new_prs
+        )
+    sob_delta = float(stats.get("sob_delta") or 0.0)
+    if sob_delta > 0:
+        sob_current = stats.get("sob_current")
+        current_label = (
+            f" → {fmt_time(float(sob_current))}"
+            if sob_current is not None
+            else ""
+        )
+        summary += f"\nΣ SoB покращено на {sob_delta:.2f} с{current_label}"
+    if comment:
+        summary += f"\n📝 Нотатка: {_comment_to_html(comment)}"
+    return summary
+
+
 async def _finalize_result_entry(
     target: types.Message,
     actor: types.User,
     state: FSMContext,
     comment: str | None,
     notifications: NotificationService,
+    role_service: RoleService,
 ) -> None:
     """Persist result and share summary with optional comment."""
 
@@ -236,7 +368,7 @@ async def _finalize_result_entry(
     await state.clear()
 
     try:
-        total, new_prs, timestamp = _persist_result(
+        total, new_prs, timestamp, stats_payload = _persist_result(
             athlete_id,
             actor.full_name,
             stroke,
@@ -249,16 +381,7 @@ async def _finalize_result_entry(
         await target.answer("Помилка при збереженні результату. Спробуйте пізніше.")
         return
 
-    summary = (
-        f"✅ Збережено! Загальий час <b>{fmt_time(total)}</b>\n"
-        f"Середня швидкість {speed(dist, total):.2f} м/с"
-    )
-    if new_prs:
-        summary += "\n" + "\n".join(
-            f"🥳 Новий PR сегменту #{i+1}: {fmt_time(t)}" for i, t in new_prs
-        )
-    if comment_clean:
-        summary += f"\n📝 Нотатка: {_comment_to_html(comment_clean)}"
+    summary = _format_result_summary(dist, total, new_prs, stats_payload, comment_clean)
 
     keyboard = get_result_actions_keyboard(
         athlete_id=athlete_id,
@@ -271,14 +394,18 @@ async def _finalize_result_entry(
     analysis_text = _analysis_text(dist, splits, total, segments)
     await target.answer(analysis_text, parse_mode="HTML")
 
+    trainers = await role_service.trainers_for_athlete(athlete_id)
     await notifications.notify_new_result(
         actor_id=actor.id,
         actor_name=actor.full_name,
         athlete_id=athlete_id,
         athlete_name=actor.full_name,
         dist=dist,
+        stroke=stroke,
         total=total,
         timestamp=timestamp,
+        stats=stats_payload,
+        trainers=trainers,
         new_prs=new_prs,
     )
 
@@ -472,11 +599,17 @@ async def comment_received(
     message: types.Message,
     state: FSMContext,
     notifications: NotificationService,
+    role_service: RoleService,
 ) -> None:
     """Save result together with supplied comment."""
 
     await _finalize_result_entry(
-        message, message.from_user, state, message.text, notifications
+        message,
+        message.from_user,
+        state,
+        message.text,
+        notifications,
+        role_service,
     )
 
 
@@ -485,11 +618,19 @@ async def comment_skipped(
     cb: types.CallbackQuery,
     state: FSMContext,
     notifications: NotificationService,
+    role_service: RoleService,
 ) -> None:
     """Finalize result without comment."""
 
     await cb.answer("Без нотатки")
-    await _finalize_result_entry(cb.message, cb.from_user, state, None, notifications)
+    await _finalize_result_entry(
+        cb.message,
+        cb.from_user,
+        state,
+        None,
+        notifications,
+        role_service,
+    )
 
 
 @router.callback_query(RepeatCB.filter())
@@ -497,6 +638,7 @@ async def repeat_previous(
     cb: types.CallbackQuery,
     callback_data: RepeatCB,
     notifications: NotificationService,
+    role_service: RoleService,
 ) -> None:
     """Duplicate the previously saved result for faster logging."""
 
@@ -508,7 +650,7 @@ async def repeat_previous(
 
     await cb.answer()
     try:
-        total, new_prs, timestamp = _persist_result(
+        total, new_prs, timestamp, stats_payload = _persist_result(
             payload["athlete_id"],
             payload["athlete_name"],
             payload["stroke"],
@@ -524,15 +666,9 @@ async def repeat_previous(
         return
 
     dist = payload["dist"]
-    txt = (
-        "🔁 Продубльовано попередній результат!\n"
-        f"Загальний час <b>{fmt_time(total)}</b>\n"
-        f"Середня швидкість {speed(dist, total):.2f} м/с"
+    txt = "🔁 Продубльовано попередній результат!\n" + _format_result_summary(
+        dist, total, new_prs, stats_payload, None
     )
-    if new_prs:
-        txt += "\n" + "\n".join(
-            f"🥳 Новий PR сегменту #{i+1}: {fmt_time(t)}" for i, t in new_prs
-        )
 
     keyboard = get_result_actions_keyboard(
         athlete_id=payload["athlete_id"],
@@ -549,14 +685,18 @@ async def repeat_previous(
 
     payload.update(timestamp=timestamp, comment="")
 
+    trainers = await role_service.trainers_for_athlete(payload["athlete_id"])
     await notifications.notify_new_result(
         actor_id=cb.from_user.id,
         actor_name=cb.from_user.full_name,
         athlete_id=payload["athlete_id"],
         athlete_name=payload["athlete_name"],
         dist=payload["dist"],
+        stroke=payload["stroke"],
         total=total,
         timestamp=timestamp,
+        stats=stats_payload,
+        trainers=trainers,
         new_prs=new_prs,
     )
 
