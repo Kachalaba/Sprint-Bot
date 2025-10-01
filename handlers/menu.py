@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from aiogram import F, Router, types
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import Command
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from role_service import ROLE_ADMIN, ROLE_ATHLETE, ROLE_TRAINER, RoleService
@@ -65,15 +65,6 @@ async def _send_menu(
     await message.answer(_MENU_TEXT, reply_markup=build_menu_keyboard(role))
 
 
-@router.message(CommandStart())
-async def cmd_start(
-    message: types.Message, role_service: RoleService, user_role: str | None = None
-) -> None:
-    """Show menu depending on user role."""
-
-    await _send_menu(message, role_service, user_role)
-
-
 @router.message(Command("menu"))
 async def cmd_menu(
     message: types.Message, role_service: RoleService, user_role: str | None = None
@@ -92,8 +83,7 @@ async def start_button(
     await _send_menu(message, role_service, user_role)
 
 
-@router.callback_query(F.data == "menu_reports")
-@require_roles(ROLE_TRAINER, ROLE_ADMIN)
+@router.callback_query(require_roles(ROLE_TRAINER, ROLE_ADMIN), F.data == "menu_reports")
 async def menu_reports(cb: types.CallbackQuery) -> None:
     """Placeholder for coach/admin report section."""
 

@@ -1,3 +1,7 @@
+"""Legacy service initialisation utilities."""
+
+from __future__ import annotations
+
 import logging
 import os
 from functools import lru_cache
@@ -34,11 +38,12 @@ except gspread.exceptions.SpreadsheetNotFound:
     raise
 except gspread.exceptions.WorksheetNotFound as e:
     logging.error(
-        f"Worksheet not found: {e}. Make sure all worksheets (results, pr, log, AthletesList) exist."
+        "Worksheet not found: %s. Make sure all worksheets (results, pr, log, AthletesList) exist.",
+        e,
     )
     raise
-except Exception as e:
-    logging.error(f"An error occurred during Google Sheets initialization: {e}")
+except Exception as e:  # pragma: no cover - unexpected init errors
+    logging.error("An error occurred during Google Sheets initialization: %s", e)
     raise
 
 # --- Constants and Helpers ---
@@ -48,11 +53,12 @@ ADMIN_IDS = (os.getenv("ADMIN_IDS") or "").split(",")
 @lru_cache(maxsize=1)
 def get_all_sportsmen() -> list[str]:
     """Get a list of all sportsmen's names."""
+
     try:
         # Assuming names are in the second column (B) starting from the second row
         return ws_athletes.col_values(2)[1:]
-    except Exception as e:
-        logging.error(f"Failed to get sportsmen list from Google Sheets: {e}")
+    except Exception as e:  # pragma: no cover - relies on external service
+        logging.error("Failed to get sportsmen list from Google Sheets: %s", e)
         return []
 
 
@@ -61,7 +67,7 @@ def get_registered_athletes() -> list[tuple[int, str]]:
 
     try:
         rows = ws_athletes.get_all_values()
-    except Exception as e:
+    except Exception as e:  # pragma: no cover - relies on external service
         logging.error("Failed to fetch athletes: %s", e)
         return []
 
