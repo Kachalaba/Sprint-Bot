@@ -12,7 +12,7 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
 )
 
-from role_service import ROLE_ADMIN, ROLE_TRAINER
+from role_service import ROLE_ADMIN, ROLE_ATHLETE, ROLE_TRAINER
 
 # --- CallbackData Factories ---
 
@@ -52,6 +52,18 @@ class AddWizardCB(CallbackData, prefix="aw"):
 
     action: str
     value: str = ""
+
+
+class OnboardingRoleCB(CallbackData, prefix="onbrole"):
+    """Callback data for onboarding role selection."""
+
+    role: str
+
+
+class OnboardingLanguageCB(CallbackData, prefix="onblang"):
+    """Callback data for onboarding language selection."""
+
+    language: str
 
 
 # --- Reply Keyboards ---
@@ -174,6 +186,58 @@ def get_repeat_keyboard(athlete_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text="🔁 Повторити попередній результат",
                     callback_data=RepeatCB(athlete_id=athlete_id).pack(),
+                )
+            ]
+        ]
+    )
+
+
+def get_onboarding_role_keyboard() -> InlineKeyboardMarkup:
+    """Return keyboard with onboarding role options."""
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Я тренер",
+                    callback_data=OnboardingRoleCB(role=ROLE_TRAINER).pack(),
+                ),
+                InlineKeyboardButton(
+                    text="Я спортсмен",
+                    callback_data=OnboardingRoleCB(role=ROLE_ATHLETE).pack(),
+                ),
+            ]
+        ]
+    )
+
+
+def get_onboarding_language_keyboard() -> InlineKeyboardMarkup:
+    """Return keyboard with language choices."""
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Українська",
+                    callback_data=OnboardingLanguageCB(language="uk").pack(),
+                ),
+                InlineKeyboardButton(
+                    text="Русский",
+                    callback_data=OnboardingLanguageCB(language="ru").pack(),
+                ),
+            ]
+        ]
+    )
+
+
+def get_onboarding_skip_keyboard() -> InlineKeyboardMarkup:
+    """Inline keyboard allowing to skip optional step."""
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Пропустить", callback_data="onboard_skip_group"
                 )
             ]
         ]

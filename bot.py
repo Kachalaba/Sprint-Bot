@@ -19,6 +19,7 @@ from handlers.error_handler import router as error_router
 from handlers.menu import router as menu_router
 from handlers.messages import router as messages_router
 from handlers.notifications import router as notifications_router
+from handlers.onboarding import router as onboarding_router
 from handlers.progress import router as progress_router
 from handlers.registration import router as registration_router
 from handlers.sprint_actions import router as sprint_router
@@ -27,6 +28,7 @@ from middlewares.roles import RoleMiddleware
 from notifications import NotificationService
 from role_service import RoleService
 from services import ADMIN_IDS, bot
+from services.user_service import UserService
 from template_service import TemplateService
 
 LOG_DIR = "logs"
@@ -87,6 +89,7 @@ def setup_dispatcher(
     """Configure dispatcher with routers."""
     dp = Dispatcher()
     dp.include_router(registration_router)
+    dp.include_router(onboarding_router)
     dp.include_router(menu_router)
     dp.include_router(common_router)
     dp.include_router(add_wizard_router)
@@ -114,6 +117,8 @@ async def main() -> None:
     admin_chat_ids = _parse_admin_chat_ids()
     role_service = RoleService()
     await role_service.init(admin_ids=admin_chat_ids)
+    user_service = UserService()
+    await user_service.init()
     template_service = TemplateService()
     await template_service.init()
     backup_service = BackupService(
@@ -134,6 +139,7 @@ async def main() -> None:
         chat_service=chat_service,
         backup_service=backup_service,
         role_service=role_service,
+        user_service=user_service,
         template_service=template_service,
     )
 
