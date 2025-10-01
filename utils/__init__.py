@@ -1,13 +1,28 @@
+"""Shared utilities for Sprint Bot."""
+
 from __future__ import annotations
 
-import re
-from datetime import datetime, timezone
-
 from aiogram.fsm.state import State, StatesGroup
+
+from .parse_time import parse_splits, parse_total, validate_splits
+
+__all__ = [
+    "AddResult",
+    "TemplateStates",
+    "fmt_time",
+    "get_segments",
+    "parse_splits",
+    "parse_total",
+    "pr_key",
+    "speed",
+    "validate_splits",
+]
 
 
 # --- FSM States ---
 class AddResult(StatesGroup):
+    """Finite state machine for manual result entry."""
+
     choose_dist = State()
     waiting_for_stroke = State()
     collect = State()
@@ -32,27 +47,16 @@ class TemplateStates(StatesGroup):
 # --- Utility Functions ---
 
 
-def parse_time(s: str) -> float:
-    """Parse time from string like 1:23.45 or 23.45 into seconds."""
-    if ":" in s:
-        m, s = s.split(":")
-        return int(m) * 60 + float(s)
-    return float(s)
-
-
 def fmt_time(seconds: float) -> str:
     """Format seconds into a string like 1:23.45."""
+
     m, s = divmod(seconds, 60)
     return f"{int(m)}:{s:05.2f}" if m else f"{s:.2f}"
 
 
 def get_segments(dist: int) -> list[int]:
-    """
-    Рассчитывает правильные отрезки для анализа дистанции.
-    - 50м: делится на 4 отрезка по 12.5м.
-    - 100м: делится на 4 отрезка по 25м.
-    - 200м и более: делится на отрезки по 50м.
-    """
+    """Calculate segment lengths for sprint analysis."""
+
     if dist == 50:
         # 50м - это 4 сегмента по 12.5м для детального анализа
         return [12.5, 12.5, 12.5, 12.5]
@@ -70,11 +74,19 @@ def get_segments(dist: int) -> list[int]:
 
 def pr_key(uid: int, stroke: str, dist: int, seg_idx: int) -> str:
     """Generate a unique key for a personal record."""
+
     return f"{uid}|{stroke}|{dist}|{seg_idx}"
 
 
 def speed(dist: float, time: float) -> float:
     """Calculate speed in m/s."""
+
     if not time:
         return 0
     return dist / time
+
+
+def parse_time(value: str) -> float:
+    """Backward compatible alias for :func:`parse_total`."""
+
+    return parse_total(value)

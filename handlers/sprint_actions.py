@@ -40,7 +40,8 @@ from notifications import NotificationService
 from role_service import ROLE_ATHLETE, ROLE_TRAINER, RoleService
 from services import ws_athletes, ws_log, ws_pr, ws_results
 from template_service import TemplateService
-from utils import AddResult, fmt_time, get_segments, parse_time, pr_key, speed
+from utils import AddResult, fmt_time, get_segments, pr_key, speed
+from utils.parse_time import parse_splits, parse_total, validate_splits
 
 router = Router()
 
@@ -122,7 +123,7 @@ def _segment_prompt(idx: int, length: float) -> str:
     distance = f"{length:g}"
     return (
         f"Час відрізку #{idx + 1} ({distance} м).\n"
-        "Формат відповіді: 0:32.45 або 32.45"
+        "Формат відповіді: 0:32.45, 32.45 або 1:05.3"
     )
 
 
@@ -138,6 +139,7 @@ def _persist_result(
 
     splits_list = list(splits)
     total = sum(splits_list)
+    validate_splits(total, splits_list)
     timestamp = datetime.now(timezone.utc).isoformat(sep=" ", timespec="seconds")
 
     ws_results.append_row(
@@ -210,7 +212,16 @@ async def _finalize_result_entry(
     """Persist result and share summary with optional comment."""
 
     data = await state.get_data()
-    splits: list[float] = list(data.get("splits", []))
+    try:
+        splits = parse_splits(data.get("splits") or [])
+    except ValueError as exc:
+        logging.warning("Invalid splits in state: %s", exc)
+        await state.clear()
+        await target.answer(
+            "Не вдалося розпізнати часи відрізків. Почніть заново, будь ласка."
+        )
+        return
+
     if not splits:
         await state.clear()
         await target.answer("Немає даних для збереження. Почніть заново.")
@@ -436,10 +447,13 @@ async def collect(message: types.Message, state: FSMContext) -> None:
     segments = [float(seg) for seg in raw_segments]
     if data.get("segments") != segments:
         await state.update_data(segments=segments)
+    raw_value = message.text or ""
     try:
-        t = parse_time(message.text)
-    except Exception:
-        return await message.reply("❗ Невірний формат. Приклади: 0:32.45 або 32.45")
+        t = parse_total(raw_value)
+    except ValueError:
+        return await message.reply(
+            "❗ Невірний формат часу. Приклади: 0:32.45, 32.45 або 1:05.3"
+        )
     splits.append(t)
     await state.update_data(splits=splits)
     if idx + 1 < len(segments):
