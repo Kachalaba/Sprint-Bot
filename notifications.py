@@ -4,7 +4,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from aiogram import Bot
 
@@ -116,33 +116,116 @@ class NotificationService:
         athlete_id: int,
         athlete_name: str,
         dist: int,
+        stroke: str,
         total: float,
         timestamp: str,
+        stats: Mapping[str, Any] | None = None,
+        trainers: Sequence[int] | None = None,
         new_prs: Sequence[tuple[int, float]] | None = None,
     ) -> None:
         """Broadcast information about a freshly logged sprint result."""
 
+        stats = stats or {}
+        segment_flags = list(stats.get("segment_prs") or [])
+        sob_delta = float(stats.get("sob_delta") or 0.0)
+        total_pr_delta = float(stats.get("total_pr_delta") or 0.0)
+        new_total_pr = bool(stats.get("new_total_pr"))
+        has_segment_pr = bool(new_prs) or any(segment_flags)
+        has_pr = new_total_pr or has_segment_pr or sob_delta > 0.0
+
         recipients = await self._get_subscribers(exclude={actor_id})
-        if not recipients:
+        if recipients:
+            logger.info(
+                "Broadcasting result update for athlete %s to %s subscribers",
+                athlete_id,
+                len(recipients),
+            )
+
+            parts = [
+                "🏁 <b>Новий результат у спринті!</b>",
+                (
+                    f"Спортсмен {athlete_name} ({stroke}) подолав {dist} м "
+                    f"за {fmt_time(total)}."
+                ),
+                f"Середня швидкість {speed(dist, total):.2f} м/с.",
+                f"Додано {timestamp} тренером {actor_name}.",
+            ]
+            if new_total_pr:
+                delta_suffix = f" (−{total_pr_delta:.2f} с)" if total_pr_delta else ""
+                parts.append(f"🏆 Новий загальний PR{delta_suffix}!")
+            if new_prs:
+                prs = ", ".join(
+                    f"#{idx + 1} — {fmt_time(value)}" for idx, value in new_prs
+                )
+                parts.append(f"🥳 Нові PR сегментів: {prs}")
+            if sob_delta > 0:
+                sob_current = stats.get("sob_current")
+                suffix = (
+                    f" → {fmt_time(float(sob_current))}"
+                    if sob_current is not None
+                    else ""
+                )
+                parts.append(f"Σ SoB покращено на {sob_delta:.2f} с{suffix}")
+
+            await self._broadcast("\n".join(parts), recipients)
+
+        if not has_pr:
             return
 
-        logger.info(
-            "Broadcasting result update for athlete %s to %s subscribers",
-            athlete_id,
-            len(recipients),
-        )
+        target_ids = set(trainers or ())
+        target_ids.add(athlete_id)
+        target_ids.discard(actor_id)
+        if not target_ids:
+            return
 
-        parts = [
-            "🏁 <b>Новий результат у спринті!</b>",
-            f"Спортсмен {athlete_name} подолав {dist} м за {fmt_time(total)}.",
-            f"Середня швидкість {speed(dist, total):.2f} м/с.",
-            f"Додано {timestamp} тренером {actor_name}.",
+        summary_parts = [
+            "🎯 <b>Нові рекорди!</b>",
+            f"{athlete_name} — {stroke}, {dist} м",
         ]
+        if new_total_pr:
+            delta_suffix = f" (−{total_pr_delta:.2f} с)" if total_pr_delta else ""
+            summary_parts.append(
+                f"• Загальний час: {fmt_time(total)}{delta_suffix}"
+            )
         if new_prs:
-            prs = ", ".join(f"#{idx + 1} — {fmt_time(value)}" for idx, value in new_prs)
-            parts.append(f"🥳 Нові PR сегментів: {prs}")
+            summary_parts.append(
+                "• Сегменти: "
+                + ", ".join(
+                    f"#{idx + 1} ({fmt_time(value)})" for idx, value in new_prs
+                )
+            )
+        elif has_segment_pr:
+            improved = [
+                f"#{idx + 1}"
+                for idx, flag in enumerate(segment_flags)
+                if flag
+            ]
+            if improved:
+                summary_parts.append("• Сегменти: " + ", ".join(improved))
+        if sob_delta > 0:
+            sob_current = stats.get("sob_current")
+            suffix = (
+                f" → {fmt_time(float(sob_current))}"
+                if sob_current is not None
+                else ""
+            )
+            summary_parts.append(f"• Sum of Best: −{sob_delta:.2f} с{suffix}")
 
-        await self._broadcast("\n".join(parts), recipients)
+        summary_text = "\n".join(summary_parts)
+        for chat_id in target_ids:
+            try:
+                await self.bot.send_message(
+                    chat_id=chat_id,
+                    text=summary_text,
+                    parse_mode="HTML",
+                )
+            except Exception as exc:  # pragma: no cover - network dependent
+                logger.warning(
+                    "Failed to deliver PR notification to %s: %s",
+                    chat_id,
+                    exc,
+                    exc_info=True,
+                )
 
     async def broadcast_text(
         self, text: str, *, exclude: Iterable[int] | None = None
