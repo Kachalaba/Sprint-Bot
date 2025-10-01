@@ -9,10 +9,10 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from filters import RoleFilter
-from keyboards import get_main_keyboard
+from handlers.menu import build_menu_keyboard
 from role_service import ROLE_ATHLETE, ROLE_TRAINER, RoleService
 from services import bot, ws_athletes
+from utils.roles import require_roles
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class RegStates(StatesGroup):
     waiting_for_name = State()
 
 
-@router.callback_query(RoleFilter(ROLE_TRAINER), F.data == "invite")
+@router.callback_query(require_roles(ROLE_TRAINER), F.data == "invite")
 async def send_invite(cb: types.CallbackQuery, role_service: RoleService) -> None:
     """Generate one-time invite link for a coach."""
 
@@ -93,5 +93,5 @@ async def process_name(
         await role_service.set_trainer(message.from_user.id, int(trainer_id))
     await state.clear()
     await message.answer(
-        f"✅ {name} зареєстрований!", reply_markup=get_main_keyboard(ROLE_ATHLETE)
+        f"✅ {name} зареєстрований!", reply_markup=build_menu_keyboard(ROLE_ATHLETE)
     )
