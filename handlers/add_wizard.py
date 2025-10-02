@@ -9,6 +9,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from i18n import t
 from keyboards import AddWizardCB, wizard_cancel_button, wizard_navigation_row
 from utils import fmt_time
 from utils.parse_time import parse_splits, parse_total, validate_splits
@@ -142,7 +143,7 @@ def _splits_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🔢 Автосумма",
+                    text=t("add.btn.autosum"),
                     callback_data=AddWizardCB(action="autosum").pack(),
                 )
             ],
@@ -156,7 +157,7 @@ def _total_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⚖️ Равномерно из total",
+                    text=t("add.btn.distribute"),
                     callback_data=AddWizardCB(action="even").pack(),
                 )
             ],
@@ -170,7 +171,7 @@ def _confirm_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="💾 Сохранить",
+                    text=t("common.save"),
                     callback_data=AddWizardCB(action="save").pack(),
                 )
             ],
@@ -191,55 +192,55 @@ def _format_summary(data: dict) -> str:
     segments_line = " + ".join(f"{value:g} м" for value in segments)
     splits_line = ", ".join(fmt_time(value) for value in splits)
     total_line = fmt_time(total) if total is not None else "—"
-    return (
-        "<b>Перевірка даних</b>\n"
-        f"Стиль: {style_label}\n"
-        f"Дистанція: {distance} м\n"
-        f"Розбивка: {segments_line}\n"
-        f"Спліти: {splits_line}\n"
-        f"Сумарно: {total_line}"
+    return t(
+        "add.summary",
+        style=style_label,
+        distance=f"{distance} м" if distance is not None else "—",
+        segments=segments_line or "—",
+        splits=splits_line or "—",
+        total=total_line,
     )
 
 
 async def _show_style_step(message: types.Message) -> None:
     await message.answer(
-        "Оберіть стиль запливу:",
+        t("add.step.style"),
         reply_markup=_style_keyboard(),
     )
 
 
 async def _show_distance_step(message: types.Message) -> None:
     await message.answer(
-        "Тепер дистанція — натисніть потрібну кнопку:",
+        t("add.step.distance"),
         reply_markup=_distance_keyboard(),
     )
 
 
 async def _show_template_step(message: types.Message, distance: int) -> None:
     await message.answer(
-        f"Дистанція {distance} м. Оберіть шаблон розбивки:",
+        t("add.step.template", distance=distance),
         reply_markup=_template_keyboard(distance),
     )
 
 
-async def _show_splits_step(message: types.Message, segments: Iterable[float]) -> None:
+async def _show_splits_step(message: types.Message, _segments: Iterable[float]) -> None:
     await message.answer(
-        "Введіть спліти через пробіл у форматі 0:32.45."
-        "\nПриклад: 0:30.5 0:31.2",
+        t("add.step.splits"),
         reply_markup=_splits_keyboard(),
     )
 
 
 async def _show_total_step(message: types.Message) -> None:
     await message.answer(
-        "Тепер введіть підсумковий час (наприклад, 1:04.32):",
+        t("add.step.total"),
         reply_markup=_total_keyboard(),
     )
 
 
 async def _show_confirm_step(message: types.Message, data: dict) -> None:
+    summary = _format_summary(data)
     await message.answer(
-        _format_summary(data),
+        f"{t('add.step.confirm')}\n\n{summary}",
         reply_markup=_confirm_keyboard(),
         parse_mode="HTML",
     )
@@ -266,7 +267,9 @@ async def cancel_wizard(callback: types.CallbackQuery, state: FSMContext) -> Non
     await callback.message.answer("Майстер скасовано.")
 
 
-@router.callback_query(AddWizardCB.filter(F.action == "style"), AddWizardStates.choose_style)
+@router.callback_query(
+    AddWizardCB.filter(F.action == "style"), AddWizardStates.choose_style
+)
 async def choose_style(
     callback: types.CallbackQuery, state: FSMContext, callback_data: AddWizardCB
 ) -> None:
@@ -304,7 +307,9 @@ async def choose_template(
     await _show_splits_step(callback.message, segments)
 
 
-@router.callback_query(AddWizardCB.filter(F.action == "autosum"), AddWizardStates.enter_splits)
+@router.callback_query(
+    AddWizardCB.filter(F.action == "autosum"), AddWizardStates.enter_splits
+)
 async def autosum_splits(callback: types.CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     splits = data.get("splits")
@@ -323,9 +328,7 @@ async def input_splits(message: types.Message, state: FSMContext) -> None:
     try:
         splits = parse_splits(chunks)
     except ValueError:
-        await message.answer(
-            "Не вдалося розпізнати спліти. Використовуйте формат 0:32.45 або 32.1."
-        )
+        await message.answer(t("error.invalid_time"))
         return
 
     data = await state.get_data()
@@ -341,7 +344,9 @@ async def input_splits(message: types.Message, state: FSMContext) -> None:
     await _show_total_step(message)
 
 
-@router.callback_query(AddWizardCB.filter(F.action == "even"), AddWizardStates.enter_total)
+@router.callback_query(
+    AddWizardCB.filter(F.action == "even"), AddWizardStates.enter_total
+)
 async def even_from_total(callback: types.CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     total = data.get("total")
@@ -361,8 +366,7 @@ async def even_from_total(callback: types.CallbackQuery, state: FSMContext) -> N
     await state.update_data(splits=splits)
     await callback.answer()
     await callback.message.answer(
-        "Спліти оновлено рівномірно: "
-        + ", ".join(fmt_time(value) for value in splits)
+        "Спліти оновлено рівномірно: " + ", ".join(fmt_time(value) for value in splits)
     )
 
 
@@ -372,9 +376,7 @@ async def input_total(message: types.Message, state: FSMContext) -> None:
     try:
         total = parse_total(text)
     except ValueError:
-        await message.answer(
-            "Формат часу не розпізнано. Приклад: 1:04.32 або 64.32"
-        )
+        await message.answer(t("error.invalid_time"))
         return
 
     data = await state.get_data()
@@ -382,9 +384,8 @@ async def input_total(message: types.Message, state: FSMContext) -> None:
     try:
         validate_splits(total, splits)
     except ValueError:
-        await message.answer(
-            "Сума сплітів не збігається з тоталом. Перевірте значення або натисніть «Равномерно»."
-        )
+        diff = abs(sum(float(value) for value in splits) - total)
+        await message.answer(t("error.splits_sum_mismatch", diff=fmt_time(diff)))
         return
 
     await state.update_data(total=total)
