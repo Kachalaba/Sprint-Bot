@@ -385,7 +385,7 @@ async def input_total(message: types.Message, state: FSMContext) -> None:
         validate_splits(total, splits)
     except ValueError:
         diff = abs(sum(float(value) for value in splits) - total)
-        await message.answer(t("error.splits_sum_mismatch", diff=fmt_time(diff)))
+        await message.answer(t("error.splits_mismatch", diff=fmt_time(diff)))
         return
 
     await state.update_data(total=total)
