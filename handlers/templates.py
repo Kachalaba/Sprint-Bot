@@ -11,6 +11,7 @@ from aiogram.filters.callback_data import CallbackData
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from i18n import t
 from role_service import ROLE_ADMIN, ROLE_TRAINER, RoleService
 from template_service import SprintTemplate, TemplateService
 from utils import TemplateStates
@@ -145,17 +146,33 @@ def _stroke_label(stroke: str) -> str:
     return stroke
 
 
+def _resolve_hint(raw_hint: str) -> str:
+    if not raw_hint:
+        return ""
+    hint = raw_hint.strip()
+    if not hint:
+        return ""
+    if hint.startswith("tpl."):
+        try:
+            return t(hint)
+        except KeyError:  # pragma: no cover - defensive fallback
+            logger.warning("Missing translation for template hint '%s'", hint)
+            return hint
+    return hint
+
+
 def _template_text(template: SprintTemplate) -> str:
     segments = template.segments or template.segments_or_default()
     segments_line = " + ".join(f"{value:g} м" for value in segments)
-    hint = template.hint or "(без підказки)"
+    hint_value = _resolve_hint(template.hint)
+    hint_text = escape(hint_value) if hint_value else "(без підказки)"
     return (
         f"<b>{escape(template.title)}</b>\n"
         f"ID: <code>{escape(template.template_id)}</code>\n"
         f"Дистанція: <b>{template.dist} м</b>\n"
         f"Стиль: <b>{_stroke_label(template.stroke)}</b>\n"
         f"Відрізки: {segments_line}\n"
-        f"Підказка: {escape(hint)}"
+        f"Підказка: {hint_text}"
     )
 
 

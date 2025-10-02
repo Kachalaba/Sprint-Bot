@@ -6,7 +6,7 @@ import logging
 import re
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Iterable, Sequence, TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterable, Sequence
 
 from utils import get_segments
 
@@ -71,7 +71,7 @@ DEFAULT_TEMPLATES: tuple[SprintTemplate, ...] = (
         title="⚡️ 50 м кроль",
         dist=50,
         stroke="freestyle",
-        hint="4×12.5 м — вибуховий старт та потужний фініш.",
+        hint="tpl.hint.50_free",
         segments=(12.5, 12.5, 12.5, 12.5),
     ),
     SprintTemplate(
@@ -79,7 +79,7 @@ DEFAULT_TEMPLATES: tuple[SprintTemplate, ...] = (
         title="🔥 100 м кроль",
         dist=100,
         stroke="freestyle",
-        hint="4×25 м. Другий відрізок контрольний, третій — прискорення.",
+        hint="tpl.hint.100_free",
         segments=(25, 25, 25, 25),
     ),
     SprintTemplate(
@@ -87,7 +87,7 @@ DEFAULT_TEMPLATES: tuple[SprintTemplate, ...] = (
         title="🦋 100 м батерфляй",
         dist=100,
         stroke="butterfly",
-        hint="4×25 м. Тримайте стабільну техніку й темп.",
+        hint="tpl.hint.100_fly",
         segments=(25, 25, 25, 25),
     ),
     SprintTemplate(
@@ -95,7 +95,7 @@ DEFAULT_TEMPLATES: tuple[SprintTemplate, ...] = (
         title="🥇 200 м комплекс",
         dist=200,
         stroke="medley",
-        hint="По 50 м на стиль: батерфляй, спина, брас, кроль.",
+        hint="tpl.hint.200_mixed",
         segments=(50, 50, 50, 50),
     ),
 )
