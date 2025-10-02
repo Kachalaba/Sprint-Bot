@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import asyncio
 from datetime import datetime
 from pathlib import Path
 
+from i18n import t
 from services.io_service import IOService
 
 
@@ -77,8 +77,8 @@ def test_dry_run_reports_invalid_rows(tmp_path: Path) -> None:
         assert len(preview.rows) == 1
         assert len(preview.issues) == 2
         messages = {issue.message for issue in preview.issues}
-        assert "athlete_id is required" in messages
-        assert "stroke is required" in messages
+        assert t("expimp.errors.athlete_required") in messages
+        assert t("expimp.errors.stroke_required") in messages
 
     asyncio.run(scenario())
 
@@ -104,7 +104,9 @@ def test_apply_import_is_idempotent(tmp_path: Path) -> None:
 
         second_preview = await service.dry_run_import(csv_content.encode("utf-8"))
         assert len(second_preview.rows) == 0
-        assert any("duplicate result" in issue.message for issue in second_preview.issues)
+        assert all(
+            issue.message == t("expimp.errors.duplicate")
+            for issue in second_preview.issues
+        )
 
     asyncio.run(scenario())
-

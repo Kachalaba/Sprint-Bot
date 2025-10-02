@@ -11,10 +11,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Sequence
 
+from i18n import t
 from services.audit_service import AuditService
-
 from utils import parse_time
-
 
 CSV_HEADERS: tuple[str, ...] = (
     "athlete_id",
@@ -56,6 +55,17 @@ class ImportPreview:
     rows: tuple[ImportRecord, ...]
     issues: tuple[ImportIssue, ...]
     total_rows: int
+
+
+class ImportValidationError(ValueError):
+    """Represent a validation error with localized context."""
+
+    __slots__ = ("key", "params")
+
+    def __init__(self, key: str, **params: object) -> None:
+        super().__init__(key)
+        self.key = key
+        self.params = params
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,7 +115,9 @@ class IOService:
     ) -> bytes:
         """Export results filtered by athletes as UTF-8 CSV bytes."""
 
-        rows = await asyncio.to_thread(self._fetch_rows, tuple(athlete_ids) if athlete_ids else None)
+        rows = await asyncio.to_thread(
+            self._fetch_rows, tuple(athlete_ids) if athlete_ids else None
+        )
         if not rows:
             return b""
 
@@ -188,14 +200,27 @@ class IOService:
                 total += 1
                 try:
                     record = self._validate_row(raw_row, index)
-                except ValueError as exc:
-                    issues.append(ImportIssue(row_number=index, message=str(exc)))
+                except ImportValidationError as exc:
+                    issues.append(
+                        ImportIssue(
+                            row_number=index,
+                            message=t(exc.key, **exc.params),
+                        )
+                    )
+                    continue
+                except ValueError as exc:  # pragma: no cover - defensive branch
+                    issues.append(
+                        ImportIssue(
+                            row_number=index,
+                            message=t("expimp.errors.generic", reason=str(exc)),
+                        )
+                    )
                     continue
                 if self._record_exists(record, conn=conn):
                     issues.append(
                         ImportIssue(
                             row_number=index,
-                            message="duplicate result already stored; skipping",
+                            message=t("expimp.errors.duplicate"),
                         )
                     )
                     continue
@@ -205,45 +230,55 @@ class IOService:
     def _validate_row(self, row: dict[str, str], index: int) -> ImportRecord:
         athlete_raw = (row.get("athlete_id") or "").strip()
         if not athlete_raw:
-            raise ValueError("athlete_id is required")
+            raise ImportValidationError("expimp.errors.athlete_required")
         try:
             athlete_id = int(float(athlete_raw))
         except ValueError as exc:
-            raise ValueError(f"invalid athlete_id: {athlete_raw!r}") from exc
+            raise ImportValidationError(
+                "expimp.errors.athlete_invalid", value=athlete_raw
+            ) from exc
         if athlete_id <= 0:
-            raise ValueError("athlete_id must be positive")
+            raise ImportValidationError("expimp.errors.athlete_positive")
 
         stroke = (row.get("stroke") or "").strip()
         if not stroke:
-            raise ValueError("stroke is required")
+            raise ImportValidationError("expimp.errors.stroke_required")
 
         distance_raw = (row.get("distance") or "").strip()
         if not distance_raw:
-            raise ValueError("distance is required")
+            raise ImportValidationError("expimp.errors.distance_required")
         try:
             distance = int(float(distance_raw))
         except ValueError as exc:
-            raise ValueError(f"invalid distance: {distance_raw!r}") from exc
+            raise ImportValidationError(
+                "expimp.errors.distance_invalid", value=distance_raw
+            ) from exc
         if distance <= 0:
-            raise ValueError("distance must be positive")
+            raise ImportValidationError("expimp.errors.distance_positive")
 
         time_raw = (row.get("time") or row.get("total_seconds") or "").strip()
         if not time_raw:
-            raise ValueError("time column is required")
+            raise ImportValidationError("expimp.errors.time_required")
         try:
-            total_seconds = parse_time(time_raw) if not _looks_like_number(time_raw) else float(time_raw)
+            total_seconds = (
+                parse_time(time_raw)
+                if not _looks_like_number(time_raw)
+                else float(time_raw)
+            )
         except ValueError as exc:
-            raise ValueError(str(exc)) from exc
+            raise _convert_time_error(time_raw, exc) from exc
         if total_seconds <= 0:
-            raise ValueError("time value must be positive")
+            raise ImportValidationError("expimp.errors.time_positive")
 
         timestamp_raw = (row.get("timestamp") or row.get("date") or "").strip()
         if not timestamp_raw:
-            raise ValueError("timestamp is required (ISO format)")
+            raise ImportValidationError("expimp.errors.timestamp_required")
         try:
             timestamp = datetime.fromisoformat(timestamp_raw)
         except ValueError as exc:
-            raise ValueError(f"invalid timestamp: {timestamp_raw!r}") from exc
+            raise ImportValidationError(
+                "expimp.errors.timestamp_invalid", value=timestamp_raw
+            ) from exc
 
         pr_raw = (row.get("is_pr") or row.get("pr") or "0").strip().lower()
         is_pr = pr_raw in {"1", "true", "yes", "y"}
@@ -339,6 +374,19 @@ def _looks_like_number(value: str) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _convert_time_error(raw: str, error: ValueError) -> ImportValidationError:
+    message = str(error)
+    if message == "time value is empty":
+        return ImportValidationError("expimp.errors.time_required")
+    if message.startswith("invalid time format"):
+        return ImportValidationError("expimp.errors.time_format", value=raw)
+    if message == "seconds part must be less than 60":
+        return ImportValidationError("expimp.errors.time_seconds")
+    if message == "time value must be non-negative":
+        return ImportValidationError("expimp.errors.time_non_negative")
+    return ImportValidationError("expimp.errors.generic", reason=message)
 
 
 __all__ = [
