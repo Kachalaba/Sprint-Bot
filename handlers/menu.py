@@ -6,12 +6,13 @@ from aiogram import F, Router, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from i18n import t
 from role_service import ROLE_ADMIN, ROLE_ATHLETE, ROLE_TRAINER, RoleService
 from utils.roles import require_roles
 
 router = Router()
 
-_MENU_TEXT = "Выберите раздел:"  # TODO: подключить i18n при доступности
+_MENU_TEXT_KEY = "menu.choose_section"
 
 
 def _row(*buttons: InlineKeyboardButton) -> list[InlineKeyboardButton]:
@@ -21,10 +22,26 @@ def _row(*buttons: InlineKeyboardButton) -> list[InlineKeyboardButton]:
 def _menu_keyboard_for_manager() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            _row(InlineKeyboardButton(text="Добавить результат", callback_data="menu_sprint")),
-            _row(InlineKeyboardButton(text="Шаблоны", callback_data="menu_templates")),
-            _row(InlineKeyboardButton(text="Отчёты", callback_data="menu_reports")),
-            _row(InlineKeyboardButton(text="Поиск/История", callback_data="menu_history")),
+            _row(
+                InlineKeyboardButton(
+                    text=t("menu.add_result"), callback_data="menu_sprint"
+                )
+            ),
+            _row(
+                InlineKeyboardButton(
+                    text=t("menu.templates"), callback_data="menu_templates"
+                )
+            ),
+            _row(
+                InlineKeyboardButton(
+                    text=t("menu.reports"), callback_data="menu_reports"
+                )
+            ),
+            _row(
+                InlineKeyboardButton(
+                    text=t("menu.search_history"), callback_data="menu_history"
+                )
+            ),
         ]
     )
 
@@ -32,8 +49,16 @@ def _menu_keyboard_for_manager() -> InlineKeyboardMarkup:
 def _menu_keyboard_for_athlete() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            _row(InlineKeyboardButton(text="Мои результаты", callback_data="menu_history")),
-            _row(InlineKeyboardButton(text="Мой прогресс", callback_data="menu_progress")),
+            _row(
+                InlineKeyboardButton(
+                    text=t("menu.my_results"), callback_data="menu_history"
+                )
+            ),
+            _row(
+                InlineKeyboardButton(
+                    text=t("menu.my_progress"), callback_data="menu_progress"
+                )
+            ),
         ]
     )
 
@@ -46,7 +71,11 @@ def build_menu_keyboard(role: str) -> InlineKeyboardMarkup:
     keyboard = _menu_keyboard_for_manager()
     if role == ROLE_ADMIN:
         keyboard.inline_keyboard.append(
-            _row(InlineKeyboardButton(text="Админ-раздел", callback_data="menu_admin"))
+            _row(
+                InlineKeyboardButton(
+                    text=t("menu.admin_section"), callback_data="menu_admin"
+                )
+            )
         )
     return keyboard
 
@@ -62,7 +91,7 @@ async def _send_menu(
     message: types.Message, role_service: RoleService, user_role: str | None
 ) -> None:
     role = await _resolve_role(message, role_service, user_role)
-    await message.answer(_MENU_TEXT, reply_markup=build_menu_keyboard(role))
+    await message.answer(t(_MENU_TEXT_KEY), reply_markup=build_menu_keyboard(role))
 
 
 @router.message(Command("menu"))
@@ -87,7 +116,7 @@ async def start_button(
 async def menu_reports(cb: types.CallbackQuery) -> None:
     """Placeholder for coach/admin report section."""
 
-    await cb.message.answer("Раздел отчётов находится в разработке.")
+    await cb.message.answer(t("menu.reports_in_development"))
     await cb.answer()
 
 

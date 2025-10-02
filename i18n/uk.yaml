@@ -1,5 +1,13 @@
 menu:
   start: "Привіт, {name}!"
   add_result: "Додати результат"
+  templates: "Шаблони"
+  reports: "Звіти"
+  search_history: "Пошук/Історія"
+  my_results: "Мої результати"
+  my_progress: "Мій прогрес"
+  admin_section: "Адмін-розділ"
+  choose_section: "Оберіть розділ:"
+  reports_in_development: "Розділ звітів у розробці."
 error:
   invalid_time: "Невірний формат часу"
