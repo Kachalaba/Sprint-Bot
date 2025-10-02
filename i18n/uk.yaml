@@ -1,5 +1,6 @@
 menu:
   start: "Привіт, {name}!"
+  title: "Оберіть розділ:"
   add_result: "Додати результат"
   templates: "Шаблони"
   reports: "Звіти"
@@ -7,7 +8,8 @@ menu:
   my_results: "Мої результати"
   my_progress: "Мій прогрес"
   admin_section: "Адмін-розділ"
-  choose_section: "Оберіть розділ:"
+  leaderboard: "Таблиця лідерів"
+  settings: "Налаштування"
   reports_in_development: "Розділ звітів у розробці."
 error:
   invalid_time: "Невірний формат часу"

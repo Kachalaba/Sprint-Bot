@@ -1,5 +1,6 @@
 menu:
   start: "Привет, {name}!"
+  title: "Выберите раздел:"
   add_result: "Добавить результат"
   templates: "Шаблоны"
   reports: "Отчёты"
@@ -7,7 +8,8 @@ menu:
   my_results: "Мои результаты"
   my_progress: "Мой прогресс"
   admin_section: "Админ-раздел"
-  choose_section: "Выберите раздел:"
+  leaderboard: "Таблица лидеров"
+  settings: "Настройки"
   reports_in_development: "Раздел отчётов находится в разработке."
 error:
   invalid_time: "Неверный формат времени"

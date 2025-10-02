@@ -12,7 +12,7 @@ from utils.roles import require_roles
 
 router = Router()
 
-_MENU_TEXT_KEY = "menu.choose_section"
+_MENU_TEXT_KEY = "menu.title"
 
 
 def _row(*buttons: InlineKeyboardButton) -> list[InlineKeyboardButton]:
