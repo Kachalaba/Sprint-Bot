@@ -72,3 +72,27 @@ res:
     total: "• Общее время: {total}"
     sob: "• Sum of Best: {sob}"
     splits: "• Отрезки: {splits}"
+report:
+  title: "Спринт: {stroke} • {distance} м"
+  col:
+    segment: "Сегмент"
+    time: "Время"
+    ms: "м/с"
+    percent_best: "% к лучшему"
+  chart:
+    pace: "Темп (сек/100м)"
+  footer:
+    total: "Общее время"
+    pr: "PR"
+    sob: "SoB"
+  status:
+    yes: "да"
+    no: "—"
+  caption:
+    last: "Последняя попытка: {distance} м, {stroke}."
+  errors:
+    mention: "Не удалось определить пользователя по нику."
+    invalid_id: "Идентификатор спортсмена должен быть числом."
+    forbidden: "У вас нет доступа к этому спортсмену."
+    no_results: "Для спортсмена ещё нет зафиксированных результатов."
+    empty_report: "Не удалось сгенерировать отчёт для пустого результата."

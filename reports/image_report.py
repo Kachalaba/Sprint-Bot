@@ -11,6 +11,7 @@ import matplotlib
 matplotlib.use("Agg")
 from matplotlib import pyplot as plt
 
+from i18n import t
 from utils import fmt_time, speed
 
 
@@ -83,7 +84,12 @@ def _format_percent(value: float | None) -> str:
 
 def _build_table(ax: plt.Axes, segments: Sequence[SegmentReportRow]) -> None:
     ax.axis("off")
-    headers = ["№", "Час", "Швидкість (м/с)", "% до найкращого"]
+    headers = [
+        t("report.col.segment"),
+        t("report.col.time"),
+        t("report.col.ms"),
+        t("report.col.percent_best"),
+    ]
     cell_data: list[list[str]] = []
     for idx, segment in enumerate(segments, start=1):
         cell_data.append(
@@ -122,8 +128,8 @@ def _build_chart(ax: plt.Axes, segments: Sequence[SegmentReportRow]) -> None:
         marker="o",
         linewidth=2,
     )
-    ax.set_xlabel("Сегмент")
-    ax.set_ylabel("Темп (сек/100м)")
+    ax.set_xlabel(t("report.col.segment"))
+    ax.set_ylabel(t("report.chart.pace"))
     ax.grid(True, color=_GRID_COLOR, linewidth=0.8, linestyle="--", alpha=0.6)
     ax.set_xlim(0.8, len(segments) + 0.2)
 
@@ -133,10 +139,19 @@ def _build_footer(ax: plt.Axes, payload: AttemptReport) -> None:
     footer_lines = [
         f"{payload.timestamp} — {payload.athlete_name}",
         f"{payload.stroke}, {payload.distance} м",
-        "Загальний час: {time} | PR: {pr} | SoB: {sob}".format(
+        "{total}: {time} | {pr}: {pr_status} | {sob}: {sob_status}".format(
+            total=t("report.footer.total"),
             time=fmt_time(payload.total_time),
-            pr="так" if payload.total_is_pr else "—",
-            sob="так" if payload.sob_improved else "—",
+            pr=t("report.footer.pr"),
+            pr_status=(
+                t("report.status.yes") if payload.total_is_pr else t("report.status.no")
+            ),
+            sob=t("report.footer.sob"),
+            sob_status=(
+                t("report.status.yes")
+                if payload.sob_improved
+                else t("report.status.no")
+            ),
         ),
     ]
     ax.text(
@@ -163,7 +178,7 @@ def generate_image_report(payload: AttemptReport) -> bytes:
     footer_ax = fig.add_subplot(grid[2])
 
     fig.suptitle(
-        f"Спринт: {payload.stroke} • {payload.distance} м",
+        t("report.title", stroke=payload.stroke, distance=payload.distance),
         fontsize=16,
         color=_TITLE_COLOR,
         fontweight="bold",
@@ -178,7 +193,9 @@ def generate_image_report(payload: AttemptReport) -> bytes:
     fig.tight_layout(rect=(0, 0, 1, 0.94))
 
     buffer = io.BytesIO()
-    fig.savefig(buffer, format="png", dpi=100, bbox_inches="tight", facecolor=_BACKGROUND_COLOR)
+    fig.savefig(
+        buffer, format="png", dpi=100, bbox_inches="tight", facecolor=_BACKGROUND_COLOR
+    )
     plt.close(fig)
     buffer.seek(0)
     return buffer.getvalue()

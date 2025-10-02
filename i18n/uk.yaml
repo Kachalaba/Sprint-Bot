@@ -71,3 +71,27 @@ res:
     total: "• Загальний час: {total}"
     sob: "• Sum of Best: {sob}"
     splits: "• Сегменти: {splits}"
+report:
+  title: "Спринт: {stroke} • {distance} м"
+  col:
+    segment: "Сегмент"
+    time: "Час"
+    ms: "м/с"
+    percent_best: "% до найкращого"
+  chart:
+    pace: "Темп (с/100м)"
+  footer:
+    total: "Загальний час"
+    pr: "PR"
+    sob: "SoB"
+  status:
+    yes: "так"
+    no: "—"
+  caption:
+    last: "Остання спроба: {distance} м, {stroke}."
+  errors:
+    mention: "Не вдалося визначити користувача за нікнеймом."
+    invalid_id: "Ідентифікатор спортсмена має бути числом."
+    forbidden: "У вас немає доступу до цього спортсмена."
+    no_results: "Для спортсмена ще немає зафіксованих результатів."
+    empty_report: "Не вдалося згенерувати звіт для порожнього результату."
