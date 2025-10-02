@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     role TEXT NOT NULL,
     full_name TEXT NOT NULL,
     group_name TEXT DEFAULT NULL,
-    language TEXT NOT NULL DEFAULT 'ru',
+    language TEXT NOT NULL DEFAULT 'uk',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
