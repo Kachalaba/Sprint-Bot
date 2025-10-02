@@ -143,7 +143,8 @@ async def confirm_import(
         await state.clear()
         return
 
-    result = await io_service.apply_import(preview)
+    actor_id = callback.from_user.id if callback.from_user else None
+    result = await io_service.apply_import(preview, user_id=actor_id)
     await state.clear()
     await callback.message.edit_text(
         _format_result(preview, result), reply_markup=None

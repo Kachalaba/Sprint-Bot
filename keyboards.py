@@ -42,6 +42,12 @@ class RepeatCB(CallbackData, prefix="repeat"):
     athlete_id: int
 
 
+class AuditUndoCB(CallbackData, prefix="auditundo"):
+    """Callback factory for audit undo actions."""
+
+    op_id: int
+
+
 class CommentCB(CallbackData, prefix="comment"):
     """Callback factory for comment management."""
 
@@ -202,6 +208,21 @@ def get_repeat_keyboard(athlete_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     text="🔁 Повторити попередній результат",
                     callback_data=RepeatCB(athlete_id=athlete_id).pack(),
+                )
+            ]
+        ]
+    )
+
+
+def build_audit_entry_keyboard(op_id: int) -> InlineKeyboardMarkup:
+    """Build keyboard for undoing audit operation."""
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="↩️ Відкотити",
+                    callback_data=AuditUndoCB(op_id=op_id).pack(),
                 )
             ]
         ]

@@ -13,6 +13,7 @@ from backup_service import BackupService
 from chat_service import DB_PATH, ChatService
 from handlers.add_wizard import router as add_wizard_router
 from handlers.admin import router as admin_router
+from handlers.admin_history import router as admin_history_router
 from handlers.backup import router as backup_router
 from handlers.common import router as common_router
 from handlers.error_handler import router as error_router
@@ -33,6 +34,7 @@ from middlewares.roles import RoleMiddleware
 from notifications import NotificationService
 from role_service import RoleService
 from services import ADMIN_IDS, bot
+from services.audit_service import AuditService
 from services.io_service import IOService
 from services.query_service import QueryService
 from services.stats_service import StatsService
@@ -102,6 +104,7 @@ def setup_dispatcher(
     dp.include_router(common_router)
     dp.include_router(add_wizard_router)
     dp.include_router(admin_router)
+    dp.include_router(admin_history_router)
     dp.include_router(progress_router)
     dp.include_router(leaderboard_router)
     dp.include_router(reports_router)
@@ -132,13 +135,15 @@ async def main() -> None:
     await role_service.init(admin_ids=admin_chat_ids)
     user_service = UserService()
     await user_service.init()
-    template_service = TemplateService()
+    audit_service = AuditService()
+    await audit_service.init()
+    template_service = TemplateService(audit_service=audit_service)
     await template_service.init()
     query_service = QueryService()
     await query_service.init()
     stats_service = StatsService()
     await stats_service.init()
-    io_service = IOService()
+    io_service = IOService(audit_service=audit_service)
     await io_service.init()
     backup_service = BackupService(
         bot=bot,
@@ -163,6 +168,7 @@ async def main() -> None:
         query_service=query_service,
         stats_service=stats_service,
         io_service=io_service,
+        audit_service=audit_service,
     )
 
 

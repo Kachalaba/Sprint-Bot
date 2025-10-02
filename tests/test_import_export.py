@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import asyncio
 from datetime import datetime
 from pathlib import Path
 
@@ -97,7 +98,7 @@ def test_apply_import_is_idempotent(tmp_path: Path) -> None:
         preview = await service.dry_run_import(csv_content.encode("utf-8"))
         assert len(preview.rows) == 2
 
-        result = await service.apply_import(preview)
+        result = await service.apply_import(preview, user_id=1)
         assert result.inserted == 2
         assert result.skipped == 0
 
