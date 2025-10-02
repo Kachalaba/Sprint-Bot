@@ -8,6 +8,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from aiogram import Bot
 
+from i18n import t
 from utils import fmt_time, speed
 
 logger = logging.getLogger(__name__)
@@ -141,33 +142,21 @@ class NotificationService:
                 len(recipients),
             )
 
-            parts = [
-                "🏁 <b>Новий результат у спринті!</b>",
-                (
-                    f"Спортсмен {athlete_name} ({stroke}) подолав {dist} м "
-                    f"за {fmt_time(total)}."
-                ),
-                f"Середня швидкість {speed(dist, total):.2f} м/с.",
-                f"Додано {timestamp} тренером {actor_name}.",
-            ]
-            if new_total_pr:
-                delta_suffix = f" (−{total_pr_delta:.2f} с)" if total_pr_delta else ""
-                parts.append(f"🏆 Новий загальний PR{delta_suffix}!")
-            if new_prs:
-                prs = ", ".join(
-                    f"#{idx + 1} — {fmt_time(value)}" for idx, value in new_prs
-                )
-                parts.append(f"🥳 Нові PR сегментів: {prs}")
-            if sob_delta > 0:
-                sob_current = stats.get("sob_current")
-                suffix = (
-                    f" → {fmt_time(float(sob_current))}"
-                    if sob_current is not None
-                    else ""
-                )
-                parts.append(f"Σ SoB покращено на {sob_delta:.2f} с{suffix}")
+            message = self._build_broadcast_message(
+                athlete_name=athlete_name,
+                stroke=stroke,
+                dist=dist,
+                total=total,
+                timestamp=timestamp,
+                actor_name=actor_name,
+                new_total_pr=new_total_pr,
+                total_pr_delta=total_pr_delta,
+                new_prs=new_prs,
+                sob_delta=sob_delta,
+                sob_current=stats.get("sob_current"),
+            )
 
-            await self._broadcast("\n".join(parts), recipients)
+            await self._broadcast(message, recipients)
 
         if not has_pr:
             return
@@ -178,40 +167,19 @@ class NotificationService:
         if not target_ids:
             return
 
-        summary_parts = [
-            "🎯 <b>Нові рекорди!</b>",
-            f"{athlete_name} — {stroke}, {dist} м",
-        ]
-        if new_total_pr:
-            delta_suffix = f" (−{total_pr_delta:.2f} с)" if total_pr_delta else ""
-            summary_parts.append(
-                f"• Загальний час: {fmt_time(total)}{delta_suffix}"
-            )
-        if new_prs:
-            summary_parts.append(
-                "• Сегменти: "
-                + ", ".join(
-                    f"#{idx + 1} ({fmt_time(value)})" for idx, value in new_prs
-                )
-            )
-        elif has_segment_pr:
-            improved = [
-                f"#{idx + 1}"
-                for idx, flag in enumerate(segment_flags)
-                if flag
-            ]
-            if improved:
-                summary_parts.append("• Сегменти: " + ", ".join(improved))
-        if sob_delta > 0:
-            sob_current = stats.get("sob_current")
-            suffix = (
-                f" → {fmt_time(float(sob_current))}"
-                if sob_current is not None
-                else ""
-            )
-            summary_parts.append(f"• Sum of Best: −{sob_delta:.2f} с{suffix}")
-
-        summary_text = "\n".join(summary_parts)
+        summary_text = self._build_pr_summary(
+            athlete_name=athlete_name,
+            stroke=stroke,
+            dist=dist,
+            total=total,
+            new_total_pr=new_total_pr,
+            total_pr_delta=total_pr_delta,
+            new_prs=new_prs,
+            has_segment_pr=has_segment_pr,
+            segment_flags=segment_flags,
+            sob_delta=sob_delta,
+            sob_current=stats.get("sob_current"),
+        )
         for chat_id in target_ids:
             try:
                 await self.bot.send_message(
@@ -324,3 +292,176 @@ class NotificationService:
     def _format_start_label(self, start: datetime) -> str:
         weekday = self.weekday_name(start.weekday())
         return f"{weekday}, {start:%d.%m о %H:%M}"
+
+    def quiet_hours_notice(self, *, lang: str | None = None) -> str:
+        """Return localized notice about quiet hours."""
+
+        return t("note.quiet_hours", lang=lang)
+
+    def info_notice(self, *, lang: str | None = None) -> str:
+        """Return localized informational notice."""
+
+        return t("note.info", lang=lang)
+
+    def _build_broadcast_message(
+        self,
+        *,
+        athlete_name: str,
+        stroke: str,
+        dist: int,
+        total: float,
+        timestamp: str,
+        actor_name: str,
+        new_total_pr: bool,
+        total_pr_delta: float,
+        new_prs: Sequence[tuple[int, float]] | None,
+        sob_delta: float,
+        sob_current: float | str | None,
+        lang: str | None = None,
+    ) -> str:
+        """Compose localized broadcast message for a new result."""
+
+        parts = [
+            t("note.result_header", lang=lang),
+            t(
+                "note.result_body",
+                lang=lang,
+                athlete=athlete_name,
+                stroke=stroke,
+                distance=dist,
+                time=fmt_time(total),
+            ),
+            t(
+                "note.result_speed",
+                lang=lang,
+                speed=f"{speed(dist, total):.2f}",
+            ),
+            t(
+                "note.result_added",
+                lang=lang,
+                timestamp=timestamp,
+                coach=actor_name,
+            ),
+        ]
+        if new_total_pr:
+            delta_suffix = self._format_total_pr_delta(total_pr_delta)
+            parts.append(
+                t(
+                    "note.result_total_pr",
+                    lang=lang,
+                    delta=delta_suffix,
+                )
+            )
+        if new_prs:
+            segment_labels = ", ".join(
+                t("note.pr_segment", lang=lang, seg=idx + 1, time=fmt_time(value))
+                for idx, value in new_prs
+            )
+            parts.append(t("note.result_segment_prs", lang=lang, items=segment_labels))
+        if sob_delta > 0:
+            current_suffix = self._format_sob_suffix(sob_current, lang=lang)
+            parts.append(
+                t(
+                    "note.result_sob",
+                    lang=lang,
+                    delta=f"{sob_delta:.2f}",
+                    current=current_suffix,
+                )
+            )
+
+        return "\n".join(parts)
+
+    def _build_pr_summary(
+        self,
+        *,
+        athlete_name: str,
+        stroke: str,
+        dist: int,
+        total: float,
+        new_total_pr: bool,
+        total_pr_delta: float,
+        new_prs: Sequence[tuple[int, float]] | None,
+        has_segment_pr: bool,
+        segment_flags: Sequence[bool],
+        sob_delta: float,
+        sob_current: float | str | None,
+        lang: str | None = None,
+    ) -> str:
+        """Compose localized summary for PR recipients."""
+
+        parts = [
+            t("note.pr_title", lang=lang),
+            t(
+                "note.pr_athlete",
+                lang=lang,
+                athlete=athlete_name,
+                stroke=stroke,
+                distance=dist,
+            ),
+        ]
+        if new_total_pr:
+            delta_suffix = self._format_total_pr_delta(total_pr_delta)
+            parts.append(
+                t(
+                    "note.pr_total",
+                    lang=lang,
+                    time=fmt_time(total),
+                    delta=delta_suffix,
+                )
+            )
+        if new_prs:
+            items = ", ".join(
+                t("note.pr_segment", lang=lang, seg=idx + 1, time=fmt_time(value))
+                for idx, value in new_prs
+            )
+            parts.append(t("note.pr_segments", lang=lang, items=items))
+        elif has_segment_pr:
+            improved = [
+                t("note.pr_segment_short", lang=lang, seg=idx + 1)
+                for idx, flag in enumerate(segment_flags)
+                if flag
+            ]
+            if improved:
+                parts.append(
+                    t(
+                        "note.pr_segments",
+                        lang=lang,
+                        items=", ".join(improved),
+                    )
+                )
+        if sob_delta > 0:
+            current_suffix = self._format_sob_suffix(sob_current, lang=lang)
+            parts.append(
+                t(
+                    "note.sob_delta",
+                    lang=lang,
+                    delta=f"{sob_delta:.2f}",
+                    current=current_suffix,
+                )
+            )
+
+        return "\n".join(parts)
+
+    def _format_total_pr_delta(self, total_pr_delta: float) -> str:
+        """Return formatted delta suffix for total PR notifications."""
+
+        if total_pr_delta:
+            return f" (−{total_pr_delta:.2f} с)"
+        return ""
+
+    def _format_sob_suffix(
+        self, sob_current: float | str | None, *, lang: str | None = None
+    ) -> str:
+        """Return localized suffix for Sum of Best notifications."""
+
+        if sob_current is None:
+            return ""
+        try:
+            current_value = float(sob_current)
+        except (TypeError, ValueError):  # pragma: no cover - defensive
+            return ""
+        return t(
+            "note.sob_current",
+            lang=lang,
+            current=fmt_time(current_value),
+        )
