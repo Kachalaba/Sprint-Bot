@@ -23,8 +23,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from i18n import t
-
-from .add_result import build_quick_prompt, build_quick_saved
 from keyboards import (
     CommentCB,
     DistanceCB,
@@ -42,10 +40,12 @@ from keyboards import (
 from notifications import NotificationService
 from role_service import ROLE_ATHLETE, ROLE_TRAINER, RoleService
 from services import ws_athletes, ws_log, ws_pr, ws_results
-from template_service import TemplateService
 from services.stats_service import SobStats, calc_segment_prs, calc_sob, calc_total_pr
+from template_service import SprintTemplate, TemplateService
 from utils import AddResult, fmt_time, get_segments, pr_key, speed
 from utils.parse_time import parse_splits, parse_total, validate_splits
+
+from .add_result import build_quick_prompt, build_quick_saved
 
 router = Router()
 
@@ -119,6 +119,20 @@ def _build_comment_edit_keyboard(
             [InlineKeyboardButton(text="⬅️ Скасувати", callback_data="comment_cancel")],
         ]
     )
+
+
+def _resolve_template_hint(template: SprintTemplate) -> str:
+    raw_hint = template.hint or ""
+    hint = raw_hint.strip()
+    if not hint:
+        return ""
+    if hint.startswith("tpl."):
+        try:
+            return t(hint)
+        except KeyError:  # pragma: no cover - defensive fallback
+            logging.warning("Missing translation for template hint '%s'", hint)
+            return hint
+    return hint
 
 
 def _segment_prompt(idx: int, length: float) -> str:
@@ -319,9 +333,7 @@ def _format_result_summary(
     if sob_delta > 0:
         sob_current = stats.get("sob_current")
         current_label = (
-            f" → {fmt_time(float(sob_current))}"
-            if sob_current is not None
-            else ""
+            f" → {fmt_time(float(sob_current))}" if sob_current is not None else ""
         )
         summary += f"\nΣ SoB покращено на {sob_delta:.2f} с{current_label}"
     if comment:
@@ -512,12 +524,13 @@ async def template_selected(
         segments=[float(seg) for seg in segs],
     )
     await state.set_state(AddResult.collect)
-    hint = f"💡 {template.hint}" if template.hint else ""
+    hint_value = _resolve_template_hint(template)
+    hint_block = f"💡 {hint_value}\n" if hint_value else ""
     segments_line = " + ".join(f"{seg:g} м" for seg in segs)
     await cb.message.answer(
-        "✅ Обрано шаблон «{title}».\n{hint}\nРозбивка: {segments}\n{prompt}".format(
+        "✅ Обрано шаблон «{title}».\n{hint}Розбивка: {segments}\n{prompt}".format(
             title=template.title,
-            hint=hint,
+            hint=hint_block,
             segments=segments_line,
             prompt=_segment_prompt(0, segs[0]),
         )
@@ -880,9 +893,7 @@ async def history(cb: types.CallbackQuery) -> None:
                             )
 
                     if len(row) > 7 and row[7].strip():
-                        out.append(
-                            f"  📝 Нотатка: {_comment_to_html(row[7].strip())}"
-                        )
+                        out.append(f"  📝 Нотатка: {_comment_to_html(row[7].strip())}")
 
                     out.append("-" * 20)
                     processed_count += 1
