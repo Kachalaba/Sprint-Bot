@@ -18,6 +18,37 @@ from role_service import ROLE_ADMIN, ROLE_ATHLETE, ROLE_TRAINER
 if TYPE_CHECKING:  # pragma: no cover - typing helpers only
     from services.query_service import SearchResult
 
+# --- Translation keys ---
+
+KB_ADD_RESULT = "kb.add_result"
+KB_MY_RESULTS = "kb.my_results"
+KB_PERSONAL_RECORDS = "kb.personal_records"
+KB_STROKE_FREESTYLE = "kb.stroke.freestyle"
+KB_STROKE_BACKSTROKE = "kb.stroke.backstroke"
+KB_STROKE_BUTTERFLY = "kb.stroke.butterfly"
+KB_STROKE_BREASTSTROKE = "kb.stroke.breaststroke"
+KB_SHOW_HISTORY = "kb.show_history"
+KB_DISTANCE_VALUE = "kb.distance.value"
+KB_DISTANCE_TEMPLATES = "kb.distance.templates"
+KB_DISTANCE_OTHER = "kb.distance.other"
+KB_REPEAT_LAST = "kb.repeat_last"
+KB_ONBOARD_TRAINER = "kb.onboarding.trainer"
+KB_ONBOARD_ATHLETE = "kb.onboarding.athlete"
+KB_LANGUAGE_UK = "kb.language.uk"
+KB_LANGUAGE_RU = "kb.language.ru"
+KB_SKIP = "kb.skip"
+KB_COMMENT_EDIT = "kb.comment.edit"
+KB_COMMENT_ADD = "kb.comment.add"
+KB_MENU_SPRINT = "kb.menu.sprint"
+KB_MENU_STAYER = "kb.menu.stayer"
+KB_MENU_HISTORY = "kb.menu.history"
+KB_MENU_RECORDS = "kb.menu.records"
+KB_MENU_MESSAGES = "kb.menu.messages"
+KB_MENU_INVITE = "kb.menu.invite"
+KB_MENU_ADMIN = "kb.menu.admin"
+
+COMMON_BACK = "common.back"
+COMMON_CANCEL = "common.cancel"
 # --- CallbackData Factories ---
 
 
@@ -91,16 +122,21 @@ class SearchPageCB(CallbackData, prefix="searchpg"):
 
 # --- Reply Keyboards ---
 
-main_keyboard = ReplyKeyboardMarkup(
-    keyboard=[
-        [KeyboardButton(text="Додати результат ➕")],
-        [
-            KeyboardButton(text="Мої результати 🏆"),
-            KeyboardButton(text="Особисті рекорди 🥇"),
+
+def build_main_reply_keyboard() -> ReplyKeyboardMarkup:
+    """Return main reply keyboard with localized labels."""
+
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=t(KB_ADD_RESULT))],
+            [
+                KeyboardButton(text=t(KB_MY_RESULTS)),
+                KeyboardButton(text=t(KB_PERSONAL_RECORDS)),
+            ],
         ],
-    ],
-    resize_keyboard=True,
-)
+        resize_keyboard=True,
+    )
+
 
 # --- Inline Keyboards ---
 
@@ -111,19 +147,22 @@ def get_stroke_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🏊‍♂️ Кроль", callback_data=StrokeCB(stroke="freestyle").pack()
+                    text=t(KB_STROKE_FREESTYLE),
+                    callback_data=StrokeCB(stroke="freestyle").pack(),
                 ),
                 InlineKeyboardButton(
-                    text="🏊‍♀️ Спина", callback_data=StrokeCB(stroke="backstroke").pack()
+                    text=t(KB_STROKE_BACKSTROKE),
+                    callback_data=StrokeCB(stroke="backstroke").pack(),
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    text="🦋 Батерфляй",
+                    text=t(KB_STROKE_BUTTERFLY),
                     callback_data=StrokeCB(stroke="butterfly").pack(),
                 ),
                 InlineKeyboardButton(
-                    text="🐸 Брас", callback_data=StrokeCB(stroke="breaststroke").pack()
+                    text=t(KB_STROKE_BREASTSTROKE),
+                    callback_data=StrokeCB(stroke="breaststroke").pack(),
                 ),
             ],
         ]
@@ -134,11 +173,7 @@ def get_history_keyboard() -> InlineKeyboardMarkup:
     """Get keyboard with a button to show detailed history."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="📜 Показати детальну історію", callback_data="history"
-                )
-            ]
+            [InlineKeyboardButton(text=t(KB_SHOW_HISTORY), callback_data="history")]
         ]
     )
 
@@ -157,7 +192,8 @@ def get_distance_keyboard() -> InlineKeyboardMarkup:
     distance_buttons = [
         [
             InlineKeyboardButton(
-                text=f"{dist} м", callback_data=DistanceCB(value=dist).pack()
+                text=t(KB_DISTANCE_VALUE, distance=dist),
+                callback_data=DistanceCB(value=dist).pack(),
             )
             for dist in row
         ]
@@ -165,8 +201,12 @@ def get_distance_keyboard() -> InlineKeyboardMarkup:
     ]
 
     extra_row = [
-        InlineKeyboardButton(text="📋 Шаблони", callback_data="choose_template"),
-        InlineKeyboardButton(text="✏️ Інша", callback_data="manual_distance"),
+        InlineKeyboardButton(
+            text=t(KB_DISTANCE_TEMPLATES), callback_data="choose_template"
+        ),
+        InlineKeyboardButton(
+            text=t(KB_DISTANCE_OTHER), callback_data="manual_distance"
+        ),
     ]
 
     return InlineKeyboardMarkup(inline_keyboard=distance_buttons + [extra_row])
@@ -193,7 +233,7 @@ def get_template_keyboard(templates: Iterable[tuple[str, str]]) -> InlineKeyboar
 
     buttons.append(
         [
-            InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_distance"),
+            InlineKeyboardButton(text=t(COMMON_BACK), callback_data="back_to_distance"),
         ]
     )
 
@@ -207,7 +247,7 @@ def get_repeat_keyboard(athlete_id: int) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="🔁 Повторити попередній результат",
+                    text=t(KB_REPEAT_LAST),
                     callback_data=RepeatCB(athlete_id=athlete_id).pack(),
                 )
             ]
@@ -237,11 +277,11 @@ def get_onboarding_role_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Я тренер",
+                    text=t(KB_ONBOARD_TRAINER),
                     callback_data=OnboardingRoleCB(role=ROLE_TRAINER).pack(),
                 ),
                 InlineKeyboardButton(
-                    text="Я спортсмен",
+                    text=t(KB_ONBOARD_ATHLETE),
                     callback_data=OnboardingRoleCB(role=ROLE_ATHLETE).pack(),
                 ),
             ]
@@ -256,11 +296,11 @@ def get_onboarding_language_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Українська",
+                    text=t(KB_LANGUAGE_UK),
                     callback_data=OnboardingLanguageCB(language="uk").pack(),
                 ),
                 InlineKeyboardButton(
-                    text="Русский",
+                    text=t(KB_LANGUAGE_RU),
                     callback_data=OnboardingLanguageCB(language="ru").pack(),
                 ),
             ]
@@ -273,11 +313,7 @@ def get_onboarding_skip_keyboard() -> InlineKeyboardMarkup:
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="Пропустить", callback_data="onboard_skip_group"
-                )
-            ]
+            [InlineKeyboardButton(text=t(KB_SKIP), callback_data="onboard_skip_group")]
         ]
     )
 
@@ -305,7 +341,7 @@ def get_comment_prompt_keyboard() -> InlineKeyboardMarkup:
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="Пропустити", callback_data="comment_skip")]
+            [InlineKeyboardButton(text=t(KB_SKIP), callback_data="comment_skip")]
         ]
     )
 
@@ -314,7 +350,7 @@ def wizard_cancel_button() -> InlineKeyboardButton:
     """Return standard cancel button for the add wizard."""
 
     return InlineKeyboardButton(
-        text=t("common.cancel"), callback_data=AddWizardCB(action="cancel").pack()
+        text=t(COMMON_CANCEL), callback_data=AddWizardCB(action="cancel").pack()
     )
 
 
@@ -325,7 +361,7 @@ def wizard_navigation_row(back_target: str | None) -> list[InlineKeyboardButton]
     if back_target:
         buttons.append(
             InlineKeyboardButton(
-                text=t("common.back"),
+                text=t(COMMON_BACK),
                 callback_data=AddWizardCB(action="back", value=back_target).pack(),
             )
         )
@@ -339,7 +375,8 @@ def get_result_actions_keyboard(
     """Keyboard with comment management and repeat actions."""
 
     packed_ts = pack_timestamp_for_callback(timestamp)
-    comment_text = "✏️ Редагувати нотатку" if has_comment else "📝 Додати нотатку"
+    comment_key = KB_COMMENT_EDIT if has_comment else KB_COMMENT_ADD
+    comment_text = t(comment_key)
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -352,7 +389,7 @@ def get_result_actions_keyboard(
             ],
             [
                 InlineKeyboardButton(
-                    text="🔁 Повторити попередній результат",
+                    text=t(KB_REPEAT_LAST),
                     callback_data=RepeatCB(athlete_id=athlete_id).pack(),
                 )
             ],
@@ -364,24 +401,22 @@ def get_main_keyboard(role: str) -> InlineKeyboardMarkup:
     """Return main menu keyboard respecting user role."""
 
     buttons = [
-        [InlineKeyboardButton(text="Спринт", callback_data="menu_sprint")],
-        [InlineKeyboardButton(text="Стаєр", callback_data="menu_stayer")],
-        [InlineKeyboardButton(text="Історія", callback_data="menu_history")],
-        [InlineKeyboardButton(text="Рекорди", callback_data="menu_records")],
-        [InlineKeyboardButton(text="💬 Повідомлення", callback_data="menu_messages")],
+        [InlineKeyboardButton(text=t(KB_MENU_SPRINT), callback_data="menu_sprint")],
+        [InlineKeyboardButton(text=t(KB_MENU_STAYER), callback_data="menu_stayer")],
+        [InlineKeyboardButton(text=t(KB_MENU_HISTORY), callback_data="menu_history")],
+        [InlineKeyboardButton(text=t(KB_MENU_RECORDS), callback_data="menu_records")],
+        [InlineKeyboardButton(text=t(KB_MENU_MESSAGES), callback_data="menu_messages")],
     ]
 
     if role in {ROLE_TRAINER, ROLE_ADMIN}:
         buttons.append(
-            [
-                InlineKeyboardButton(
-                    text="➕ Запросити спортсмена", callback_data="invite"
-                )
-            ]
+            [InlineKeyboardButton(text=t(KB_MENU_INVITE), callback_data="invite")]
         )
 
     if role == ROLE_ADMIN:
-        buttons.append([InlineKeyboardButton(text="Адмін", callback_data="menu_admin")])
+        buttons.append(
+            [InlineKeyboardButton(text=t(KB_MENU_ADMIN), callback_data="menu_admin")]
+        )
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
