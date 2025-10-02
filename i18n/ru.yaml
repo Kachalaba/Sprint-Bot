@@ -1,5 +1,13 @@
 menu:
   start: "Привет, {name}!"
   add_result: "Добавить результат"
+  templates: "Шаблоны"
+  reports: "Отчёты"
+  search_history: "Поиск/История"
+  my_results: "Мои результаты"
+  my_progress: "Мой прогресс"
+  admin_section: "Админ-раздел"
+  choose_section: "Выберите раздел:"
+  reports_in_development: "Раздел отчётов находится в разработке."
 error:
   invalid_time: "Неверный формат времени"
