@@ -319,26 +319,34 @@ def _format_result_summary(
 ) -> str:
     """Compose short HTML summary for saved result."""
 
-    summary = build_quick_saved(dist, total)
+    summary_lines = [build_quick_saved(dist, total)]
     if stats.get("new_total_pr"):
         delta = stats.get("total_pr_delta") or 0.0
         delta_suffix = f" (−{delta:.2f} с)" if delta else ""
-        summary += f"\n🏆 Новий загальний PR{delta_suffix}!"
+        summary_lines.append(t("stats.total_pr", delta=delta_suffix))
     if new_prs:
-        summary += "\n" + "\n".join(
-            f"🥳 Новий PR сегменту #{idx + 1}: {fmt_time(value)}"
+        summary_lines.extend(
+            t("stats.segment_pr", index=idx + 1, time=fmt_time(value))
             for idx, value in new_prs
         )
     sob_delta = float(stats.get("sob_delta") or 0.0)
     if sob_delta > 0:
         sob_current = stats.get("sob_current")
         current_label = (
-            f" → {fmt_time(float(sob_current))}" if sob_current is not None else ""
+            t("note.sob_current", current=fmt_time(float(sob_current)))
+            if sob_current is not None
+            else ""
         )
-        summary += f"\nΣ SoB покращено на {sob_delta:.2f} с{current_label}"
+        summary_lines.append(
+            t(
+                "stats.sob",
+                delta=f"{sob_delta:.2f}",
+                current=current_label,
+            )
+        )
     if comment:
-        summary += f"\n📝 Нотатка: {_comment_to_html(comment)}"
-    return summary
+        summary_lines.append(t("stats.comment", comment=_comment_to_html(comment)))
+    return "\n".join(summary_lines)
 
 
 async def _finalize_result_entry(
