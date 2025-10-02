@@ -17,6 +17,7 @@ from handlers.backup import router as backup_router
 from handlers.common import router as common_router
 from handlers.error_handler import router as error_router
 from handlers.menu import router as menu_router
+from handlers.leaderboard import router as leaderboard_router
 from handlers.messages import router as messages_router
 from handlers.notifications import router as notifications_router
 from handlers.onboarding import router as onboarding_router
@@ -32,6 +33,7 @@ from notifications import NotificationService
 from role_service import RoleService
 from services import ADMIN_IDS, bot
 from services.query_service import QueryService
+from services.stats_service import StatsService
 from services.user_service import UserService
 from template_service import TemplateService
 
@@ -99,6 +101,7 @@ def setup_dispatcher(
     dp.include_router(add_wizard_router)
     dp.include_router(admin_router)
     dp.include_router(progress_router)
+    dp.include_router(leaderboard_router)
     dp.include_router(reports_router)
     dp.include_router(search_router)
     dp.include_router(results_router)
@@ -130,6 +133,8 @@ async def main() -> None:
     await template_service.init()
     query_service = QueryService()
     await query_service.init()
+    stats_service = StatsService()
+    await stats_service.init()
     backup_service = BackupService(
         bot=bot,
         db_path=Path(os.getenv("CHAT_DB_PATH", DB_PATH)),
@@ -151,6 +156,7 @@ async def main() -> None:
         user_service=user_service,
         template_service=template_service,
         query_service=query_service,
+        stats_service=stats_service,
     )
 
 
