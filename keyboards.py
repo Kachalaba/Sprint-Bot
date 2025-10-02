@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 import binascii
-from typing import Iterable
+from typing import Iterable, Sequence, TYPE_CHECKING
 
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import (
@@ -13,6 +13,9 @@ from aiogram.types import (
 )
 
 from role_service import ROLE_ADMIN, ROLE_ATHLETE, ROLE_TRAINER
+
+if TYPE_CHECKING:  # pragma: no cover - typing helpers only
+    from services.query_service import SearchResult
 
 # --- CallbackData Factories ---
 
@@ -64,6 +67,19 @@ class OnboardingLanguageCB(CallbackData, prefix="onblang"):
     """Callback data for onboarding language selection."""
 
     language: str
+
+
+class SearchFilterCB(CallbackData, prefix="searchf"):
+    """Callback data for search wizard selections."""
+
+    field: str
+    value: str
+
+
+class SearchPageCB(CallbackData, prefix="searchpg"):
+    """Callback for navigating result pages."""
+
+    page: int
 
 
 # --- Reply Keyboards ---
@@ -344,5 +360,154 @@ def get_main_keyboard(role: str) -> InlineKeyboardMarkup:
 
     if role == ROLE_ADMIN:
         buttons.append([InlineKeyboardButton(text="Адмін", callback_data="menu_admin")])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def build_search_athlete_keyboard(
+    options: Sequence[tuple[str, str]],
+    *,
+    include_all: bool = False,
+) -> InlineKeyboardMarkup:
+    """Build inline keyboard for choosing an athlete."""
+
+    buttons: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+
+    if include_all:
+        row.append(
+            InlineKeyboardButton(
+                text="Усі спортсмени",
+                callback_data=SearchFilterCB(field="athlete", value="any").pack(),
+            )
+        )
+
+    for value, label in options:
+        row.append(
+            InlineKeyboardButton(
+                text=label,
+                callback_data=SearchFilterCB(field="athlete", value=value).pack(),
+            )
+        )
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+
+    if row:
+        buttons.append(row)
+
+    if not buttons:
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    text="Усі спортсмени",
+                    callback_data=SearchFilterCB(field="athlete", value="any").pack(),
+                )
+            ]
+        ]
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def build_search_style_keyboard(choices: Sequence[tuple[str, str]]) -> InlineKeyboardMarkup:
+    """Return keyboard for choosing swim style."""
+
+    rows: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+    for value, label in choices:
+        row.append(
+            InlineKeyboardButton(
+                text=label,
+                callback_data=SearchFilterCB(field="stroke", value=value).pack(),
+            )
+        )
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def build_search_distance_keyboard(choices: Sequence[tuple[str, str]]) -> InlineKeyboardMarkup:
+    """Return keyboard for choosing sprint distance."""
+
+    rows: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+    for value, label in choices:
+        row.append(
+            InlineKeyboardButton(
+                text=label,
+                callback_data=SearchFilterCB(field="distance", value=value).pack(),
+            )
+        )
+        if len(row) == 3:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def build_search_pr_keyboard() -> InlineKeyboardMarkup:
+    """Return keyboard with PR filter choices."""
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Так",
+                    callback_data=SearchFilterCB(field="pr", value="only").pack(),
+                ),
+                InlineKeyboardButton(
+                    text="Ні",
+                    callback_data=SearchFilterCB(field="pr", value="all").pack(),
+                ),
+                InlineKeyboardButton(
+                    text="Неважливо",
+                    callback_data=SearchFilterCB(field="pr", value="any").pack(),
+                ),
+            ]
+        ]
+    )
+
+
+def build_search_results_keyboard(
+    results: Sequence["SearchResult"],
+    *,
+    page: int,
+    total_pages: int,
+    start_index: int,
+) -> InlineKeyboardMarkup:
+    """Return keyboard with report buttons and pagination controls."""
+
+    buttons: list[list[InlineKeyboardButton]] = []
+    for idx, item in enumerate(results, start=start_index + 1):
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    text=f"Отчёт #{idx}",
+                    switch_inline_query_current_chat=f"/report {item.result_id}",
+                )
+            ]
+        )
+
+    if total_pages > 1:
+        nav_row: list[InlineKeyboardButton] = []
+        if page > 1:
+            nav_row.append(
+                InlineKeyboardButton(
+                    text="◀️",
+                    callback_data=SearchPageCB(page=page - 1).pack(),
+                )
+            )
+        if page < total_pages:
+            nav_row.append(
+                InlineKeyboardButton(
+                    text="▶️",
+                    callback_data=SearchPageCB(page=page + 1).pack(),
+                )
+            )
+        if nav_row:
+            buttons.append(nav_row)
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
