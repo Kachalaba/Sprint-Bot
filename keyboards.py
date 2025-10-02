@@ -390,6 +390,7 @@ def build_search_athlete_keyboard(
     options: Sequence[tuple[str, str]],
     *,
     include_all: bool = False,
+    all_label: str | None = None,
 ) -> InlineKeyboardMarkup:
     """Build inline keyboard for choosing an athlete."""
 
@@ -399,7 +400,7 @@ def build_search_athlete_keyboard(
     if include_all:
         row.append(
             InlineKeyboardButton(
-                text="Усі спортсмени",
+                text=all_label or t("search.filter.all_users"),
                 callback_data=SearchFilterCB(field="athlete", value="any").pack(),
             )
         )
@@ -422,7 +423,7 @@ def build_search_athlete_keyboard(
         buttons = [
             [
                 InlineKeyboardButton(
-                    text="Усі спортсмени",
+                    text=all_label or t("search.filter.all_users"),
                     callback_data=SearchFilterCB(field="athlete", value="any").pack(),
                 )
             ]
@@ -482,15 +483,15 @@ def build_search_pr_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Так",
+                    text=t("search.pr.only"),
                     callback_data=SearchFilterCB(field="pr", value="only").pack(),
                 ),
                 InlineKeyboardButton(
-                    text="Ні",
+                    text=t("search.pr.all"),
                     callback_data=SearchFilterCB(field="pr", value="all").pack(),
                 ),
                 InlineKeyboardButton(
-                    text="Неважливо",
+                    text=t("search.pr.any"),
                     callback_data=SearchFilterCB(field="pr", value="any").pack(),
                 ),
             ]
@@ -512,7 +513,7 @@ def build_search_results_keyboard(
         buttons.append(
             [
                 InlineKeyboardButton(
-                    text=f"Отчёт #{idx}",
+                    text=t("search.report_btn", idx=idx),
                     switch_inline_query_current_chat=f"/report {item.result_id}",
                 )
             ]
@@ -523,14 +524,14 @@ def build_search_results_keyboard(
         if page > 1:
             nav_row.append(
                 InlineKeyboardButton(
-                    text="◀️",
+                    text=t("search.prev"),
                     callback_data=SearchPageCB(page=page - 1).pack(),
                 )
             )
         if page < total_pages:
             nav_row.append(
                 InlineKeyboardButton(
-                    text="▶️",
+                    text=t("search.next"),
                     callback_data=SearchPageCB(page=page + 1).pack(),
                 )
             )

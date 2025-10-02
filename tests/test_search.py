@@ -22,6 +22,7 @@ from handlers.search import (
     select_style,
     start_search,
 )
+from i18n import t
 from keyboards import SearchFilterCB, SearchPageCB
 from services.query_service import QueryService, SearchFilters, SearchPage, SearchResult
 
@@ -32,7 +33,9 @@ def _make_state() -> FSMContext:
     return FSMContext(storage=storage, key=key)
 
 
-def _seed_results(db_path: Path, rows: Sequence[tuple[int, str, str, int, float, str, bool]]) -> None:
+def _seed_results(
+    db_path: Path, rows: Sequence[tuple[int, str, str, int, float, str, bool]]
+) -> None:
     with sqlite3.connect(db_path) as conn:
         for athlete_id, name, stroke, distance, total, timestamp, is_pr in rows:
             conn.execute(
@@ -72,7 +75,9 @@ class FakeRoleService:
     async def get_accessible_athletes(self, requester_id: int) -> Sequence[int]:
         return (1, 2)
 
-    async def list_users(self, roles: Sequence[str] | None = None) -> Sequence[SimpleNamespace]:
+    async def list_users(
+        self, roles: Sequence[str] | None = None
+    ) -> Sequence[SimpleNamespace]:
         return self._users
 
 
@@ -275,7 +280,7 @@ def test_search_wizard_flow() -> None:
         assert filters.only_pr is True
 
         text = pr_cb_message.answer.await_args[0][0]
-        assert "Сторінка 1 з 2" in text
+        assert t("search.page", cur=1, total=2) in text
         assert "PR" in text
 
         markup = pr_cb_message.answer.await_args[1]["reply_markup"]
