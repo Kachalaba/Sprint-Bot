@@ -22,6 +22,9 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from i18n import t
+
+from .add_result import build_quick_prompt, build_quick_saved
 from keyboards import (
     CommentCB,
     DistanceCB,
@@ -121,11 +124,7 @@ def _build_comment_edit_keyboard(
 def _segment_prompt(idx: int, length: float) -> str:
     """Return formatted prompt for segment input."""
 
-    distance = f"{length:g}"
-    return (
-        f"Час відрізку #{idx + 1} ({distance} м).\n"
-        "Формат відповіді: 0:32.45, 32.45 або 1:05.3"
-    )
+    return build_quick_prompt(idx, length)
 
 
 def _load_best_total(athlete_id: int, stroke: str, dist: int) -> float | None:
@@ -306,10 +305,7 @@ def _format_result_summary(
 ) -> str:
     """Compose short HTML summary for saved result."""
 
-    summary = (
-        f"✅ Збережено! Загальний час <b>{fmt_time(total)}</b>\n"
-        f"Середня швидкість {speed(dist, total):.2f} м/с"
-    )
+    summary = build_quick_saved(dist, total)
     if stats.get("new_total_pr"):
         delta = stats.get("total_pr_delta") or 0.0
         delta_suffix = f" (−{delta:.2f} с)" if delta else ""
@@ -578,9 +574,7 @@ async def collect(message: types.Message, state: FSMContext) -> None:
     try:
         t = parse_total(raw_value)
     except ValueError:
-        return await message.reply(
-            "❗ Невірний формат часу. Приклади: 0:32.45, 32.45 або 1:05.3"
-        )
+        return await message.reply(t("error.invalid_time"))
     splits.append(t)
     await state.update_data(splits=splits)
     if idx + 1 < len(segments):
