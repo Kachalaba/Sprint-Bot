@@ -1,0 +1,5 @@
+menu:
+  start: "Привет, {name}!"
+  add_result: "Добавить результат"
+error:
+  invalid_time: "Неверный формат времени"
