@@ -21,6 +21,7 @@ from handlers.messages import router as messages_router
 from handlers.notifications import router as notifications_router
 from handlers.onboarding import router as onboarding_router
 from handlers.progress import router as progress_router
+from handlers.reports import router as reports_router
 from handlers.registration import router as registration_router
 from handlers.results import router as results_router
 from handlers.sprint_actions import router as sprint_router
@@ -96,6 +97,7 @@ def setup_dispatcher(
     dp.include_router(add_wizard_router)
     dp.include_router(admin_router)
     dp.include_router(progress_router)
+    dp.include_router(reports_router)
     dp.include_router(results_router)
     dp.include_router(sprint_router)
     dp.include_router(templates_router)
