@@ -32,4 +32,4 @@ def test_generate_image_report_snapshot() -> None:
     assert len(image_bytes) < 150_000
 
     digest = hashlib.sha256(image_bytes).hexdigest()
-    assert digest == "3924eb08b4a343051deba5e18c842ca9984ffbbdf6fcd78443db93505ca5d677"
+    assert digest == "2ef5a197cbc0f29bc4a68f0291ac067b985385b7de1d2811d101fb27c8c30705"

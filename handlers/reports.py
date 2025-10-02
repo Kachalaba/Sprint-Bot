@@ -12,12 +12,38 @@ from aiogram.enums import MessageEntityType
 from aiogram.filters import Command
 from aiogram.types import BufferedInputFile, Message
 
+from i18n import t
 from reports import AttemptReport, SegmentReportRow, generate_image_report
 from role_service import RoleService
 from services import ws_pr, ws_results
 from utils import get_segments
 
 router = Router()
+
+
+_ERROR_TRANSLATION_KEYS: dict[str, str] = {
+    "mention": "report.errors.mention",
+    "invalid_id": "report.errors.invalid_id",
+    "forbidden": "report.errors.forbidden",
+    "no_results": "report.errors.no_results",
+    "empty_report": "report.errors.empty_report",
+}
+
+
+def build_report_error(reason: str) -> str:
+    """Return localized error message for report commands."""
+
+    try:
+        key = _ERROR_TRANSLATION_KEYS[reason]
+    except KeyError as exc:  # pragma: no cover - defensive branch
+        raise ValueError(f"Unknown report error reason: {reason}") from exc
+    return t(key)
+
+
+def build_report_caption(distance: int, stroke: str) -> str:
+    """Return localized caption for the report image."""
+
+    return t("report.caption.last", distance=distance, stroke=stroke)
 
 
 @dataclass(frozen=True)
@@ -47,11 +73,11 @@ def _resolve_target_id(message: Message) -> tuple[int, str | None]:
     if not arg:
         return message.from_user.id, None
     if arg.startswith("@"):
-        return message.from_user.id, "Не вдалося визначити користувача за нікнеймом."
+        return message.from_user.id, build_report_error("mention")
     try:
         return int(arg), None
     except ValueError:
-        return message.from_user.id, "Ідентифікатор спортсмена має бути числом."
+        return message.from_user.id, build_report_error("invalid_id")
 
 
 def _parse_row(row: Sequence[str]) -> ResultPayload | None:
@@ -188,12 +214,12 @@ async def cmd_report_last(message: types.Message, role_service: RoleService) -> 
         await message.answer(error)
         return
     if not await role_service.can_access_athlete(message.from_user.id, target_id):
-        await message.answer("У вас немає доступу до цього спортсмена.")
+        await message.answer(build_report_error("forbidden"))
         return
 
     payload = _load_last_result(target_id)
     if payload is None:
-        await message.answer("Для спортсмена ще немає зафіксованих результатів.")
+        await message.answer(build_report_error("no_results"))
         return
 
     lengths = _resolve_segment_lengths(payload.distance, len(payload.splits))
@@ -225,9 +251,11 @@ async def cmd_report_last(message: types.Message, role_service: RoleService) -> 
     try:
         image_bytes = generate_image_report(attempt)
     except ValueError:
-        await message.answer("Не вдалося згенерувати звіт для порожнього результату.")
+        await message.answer(build_report_error("empty_report"))
         return
 
     file = BufferedInputFile(image_bytes, filename="report.png")
-    caption = f"Остання спроба: {payload.distance} м, {payload.stroke}."
-    await message.answer_photo(file, caption=caption)
+    await message.answer_photo(
+        file,
+        caption=build_report_caption(payload.distance, payload.stroke),
+    )
