@@ -6,11 +6,14 @@ import logging
 import re
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Iterable, Sequence, TYPE_CHECKING
 
 from utils import get_segments
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:  # pragma: no cover - typing helpers only
+    from services.audit_service import AuditService
 
 
 @dataclass(slots=True)
@@ -102,11 +105,14 @@ class TemplateService:
     """Manage persistent sprint templates stored in JSON file."""
 
     def __init__(
-        self, storage_path: str | Path = Path("data/sprint_templates.json")
+        self,
+        storage_path: str | Path = Path("data/sprint_templates.json"),
+        audit_service: "AuditService" | None = None,
     ) -> None:
         self._path = Path(storage_path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = asyncio.Lock()
+        self._audit = audit_service
 
     async def init(self) -> None:
         """Ensure storage file exists and contains valid JSON."""
@@ -148,6 +154,7 @@ class TemplateService:
         stroke: str,
         hint: str = "",
         segments: Iterable[float] | None = None,
+        actor_id: int | None = None,
     ) -> SprintTemplate:
         """Create new template and persist it."""
 
@@ -172,6 +179,12 @@ class TemplateService:
             existing.append(template)
             await asyncio.to_thread(self._write_all, existing)
             logger.info("Created sprint template %s", template_id)
+            if self._audit and actor_id is not None and actor_id > 0:
+                await self._audit.log_template_create(
+                    actor_id=actor_id,
+                    template_id=template_id,
+                    after=template.to_dict(),
+                )
             return template
 
     async def update_template(
@@ -183,6 +196,7 @@ class TemplateService:
         stroke: str | None = None,
         hint: str | None = None,
         segments: Iterable[float] | None = None,
+        actor_id: int | None = None,
     ) -> SprintTemplate:
         """Update existing template and return new value."""
 
@@ -203,7 +217,7 @@ class TemplateService:
                     title_clean = title.strip()
                     if not title_clean:
                         raise ValueError("Title must not be empty")
-                updated = replace(updated, title=title_clean)
+                    updated = replace(updated, title=title_clean)
                 if dist is not None:
                     if dist <= 0:
                         raise ValueError("Distance must be positive")
@@ -230,10 +244,22 @@ class TemplateService:
                 templates[idx] = updated
                 await asyncio.to_thread(self._write_all, templates)
                 logger.info("Updated sprint template %s", template_id)
+                if self._audit and actor_id is not None and actor_id > 0:
+                    await self._audit.log_template_update(
+                        actor_id=actor_id,
+                        template_id=template_id,
+                        before=template.to_dict(),
+                        after=updated.to_dict(),
+                    )
                 return updated
         raise KeyError(f"Template {template_id} not found")
 
-    async def delete_template(self, template_id: str) -> bool:
+    async def delete_template(
+        self,
+        template_id: str,
+        *,
+        actor_id: int | None = None,
+    ) -> bool:
         """Remove template by identifier."""
 
         async with self._lock:
@@ -241,8 +267,24 @@ class TemplateService:
             new_templates = [tpl for tpl in templates if tpl.template_id != template_id]
             if len(new_templates) == len(templates):
                 return False
+            removed: SprintTemplate | None = None
+            for tpl in templates:
+                if tpl.template_id == template_id:
+                    removed = tpl
+                    break
             await asyncio.to_thread(self._write_all, new_templates)
             logger.info("Deleted sprint template %s", template_id)
+            if (
+                removed is not None
+                and self._audit
+                and actor_id is not None
+                and actor_id > 0
+            ):
+                await self._audit.log_template_delete(
+                    actor_id=actor_id,
+                    template_id=template_id,
+                    before=removed.to_dict(),
+                )
             return True
 
     # --- internal helpers -------------------------------------------------

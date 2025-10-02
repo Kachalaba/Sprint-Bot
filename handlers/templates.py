@@ -304,7 +304,8 @@ async def template_actions(
         await cb.answer()
         return
     if action == "confirm_delete":
-        await template_service.delete_template(template_id)
+        actor_id = cb.from_user.id if cb.from_user else None
+        await template_service.delete_template(template_id, actor_id=actor_id)
         logger.info("Deleted sprint template %s", template_id)
         await state.set_state(TemplateStates.menu)
         await cb.message.answer("🗑 Шаблон видалено.")
@@ -421,12 +422,14 @@ async def create_hint(
     if hint == "-":
         hint = ""
     segments = payload.get("segments")
+    actor_id = message.from_user.id if message.from_user else None
     template = await template_service.create_template(
         title=title,
         dist=int(dist),
         stroke=stroke,
         hint=hint,
         segments=segments,
+        actor_id=actor_id,
     )
     logger.info("Created sprint template %s", template.template_id)
     await state.update_data(new_template=None)
@@ -442,8 +445,11 @@ async def edit_stroke(
     state: FSMContext,
     template_service: TemplateService,
 ) -> None:
+    actor_id = cb.from_user.id if cb.from_user else None
     template = await template_service.update_template(
-        callback_data.template_id, stroke=callback_data.stroke
+        callback_data.template_id,
+        stroke=callback_data.stroke,
+        actor_id=actor_id,
     )
     logger.info("Updated sprint template %s stroke", template.template_id)
     await state.set_state(TemplateStates.menu)
@@ -465,19 +471,24 @@ async def apply_edit(
         await state.set_state(TemplateStates.menu)
         return
     text = (message.text or "").strip()
+    actor_id = message.from_user.id if message.from_user else None
     try:
         if field == "title":
             if not text:
                 raise ValueError("Назва не може бути порожньою")
-            template = await template_service.update_template(template_id, title=text)
+            template = await template_service.update_template(
+                template_id, title=text, actor_id=actor_id
+            )
         elif field == "distance":
             dist = int(text)
             if dist <= 0:
                 raise ValueError("Дистанція має бути більшою за нуль")
-            template = await template_service.update_template(template_id, dist=dist)
+            template = await template_service.update_template(
+                template_id, dist=dist, actor_id=actor_id
+            )
         elif field == "hint":
             template = await template_service.update_template(
-                template_id, hint="" if text == "-" else text
+                template_id, hint="" if text == "-" else text, actor_id=actor_id
             )
         elif field == "segments":
             current = await template_service.get_template(template_id)
@@ -485,7 +496,7 @@ async def apply_edit(
                 raise ValueError("Шаблон не знайдено")
             segments = _parse_segments(text, dist=current.dist)
             template = await template_service.update_template(
-                template_id, segments=segments
+                template_id, segments=segments, actor_id=actor_id
             )
         else:
             raise ValueError("Невідоме поле")

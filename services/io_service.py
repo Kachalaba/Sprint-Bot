@@ -11,6 +11,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Sequence
 
+from services.audit_service import AuditService
+
 from utils import parse_time
 
 
@@ -82,10 +84,15 @@ class IOService:
     CREATE INDEX IF NOT EXISTS idx_io_results_athlete ON results(athlete_id);
     """
 
-    def __init__(self, db_path: Path | str = Path("data/results.db")) -> None:
+    def __init__(
+        self,
+        db_path: Path | str = Path("data/results.db"),
+        audit_service: AuditService | None = None,
+    ) -> None:
         self._path = Path(db_path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = asyncio.Lock()
+        self._audit = audit_service
 
     async def init(self) -> None:
         """Ensure SQLite schema exists."""
@@ -125,11 +132,21 @@ class IOService:
 
         return await asyncio.to_thread(self._dry_run_import, content)
 
-    async def apply_import(self, preview: ImportPreview) -> ImportResult:
+    async def apply_import(
+        self,
+        preview: ImportPreview,
+        *,
+        user_id: int | None = None,
+    ) -> ImportResult:
         """Insert validated rows from preview."""
 
         async with self._lock:
-            inserted, skipped = await asyncio.to_thread(self._insert_rows, preview.rows)
+            inserted, skipped, created_rows = await asyncio.to_thread(
+                self._insert_rows, preview.rows
+            )
+        if self._audit and user_id is not None and user_id > 0:
+            for row in created_rows:
+                await self._audit.log_result_create(actor_id=user_id, result=row)
         return ImportResult(inserted=inserted, skipped=skipped)
 
     # --- synchronous helpers -------------------------------------------------
@@ -265,15 +282,18 @@ class IOService:
         cursor = conn.execute(query, args)
         return cursor.fetchone() is not None
 
-    def _insert_rows(self, rows: Iterable[ImportRecord]) -> tuple[int, int]:
+    def _insert_rows(
+        self, rows: Iterable[ImportRecord]
+    ) -> tuple[int, int, list[dict[str, object]]]:
         inserted = 0
         skipped = 0
+        created: list[dict[str, object]] = []
         with self._connect() as conn:
             for record in rows:
                 if self._record_exists(record, conn=conn):
                     skipped += 1
                     continue
-                conn.execute(
+                cursor = conn.execute(
                     """
                     INSERT INTO results (
                         athlete_id,
@@ -295,9 +315,22 @@ class IOService:
                         int(record.is_pr),
                     ),
                 )
+                row_id = int(cursor.lastrowid)
+                created.append(
+                    {
+                        "id": row_id,
+                        "athlete_id": record.athlete_id,
+                        "athlete_name": record.athlete_name,
+                        "stroke": record.stroke,
+                        "distance": record.distance,
+                        "total_seconds": record.total_seconds,
+                        "timestamp": record.timestamp.isoformat(),
+                        "is_pr": int(record.is_pr),
+                    }
+                )
                 inserted += 1
             conn.commit()
-        return inserted, skipped
+        return inserted, skipped, created
 
 
 def _looks_like_number(value: str) -> bool:
