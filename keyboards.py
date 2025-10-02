@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 import binascii
-from typing import Iterable, Sequence, TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterable, Sequence
 
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import (
@@ -12,6 +12,7 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
 )
 
+from i18n import t
 from role_service import ROLE_ADMIN, ROLE_ATHLETE, ROLE_TRAINER
 
 if TYPE_CHECKING:  # pragma: no cover - typing helpers only
@@ -313,7 +314,7 @@ def wizard_cancel_button() -> InlineKeyboardButton:
     """Return standard cancel button for the add wizard."""
 
     return InlineKeyboardButton(
-        text="❌ Отмена", callback_data=AddWizardCB(action="cancel").pack()
+        text=t("common.cancel"), callback_data=AddWizardCB(action="cancel").pack()
     )
 
 
@@ -324,7 +325,7 @@ def wizard_navigation_row(back_target: str | None) -> list[InlineKeyboardButton]
     if back_target:
         buttons.append(
             InlineKeyboardButton(
-                text="⬅️ Назад",
+                text=t("common.back"),
                 callback_data=AddWizardCB(action="back", value=back_target).pack(),
             )
         )
@@ -384,6 +385,7 @@ def get_main_keyboard(role: str) -> InlineKeyboardMarkup:
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+
 def build_search_athlete_keyboard(
     options: Sequence[tuple[str, str]],
     *,
@@ -429,7 +431,9 @@ def build_search_athlete_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def build_search_style_keyboard(choices: Sequence[tuple[str, str]]) -> InlineKeyboardMarkup:
+def build_search_style_keyboard(
+    choices: Sequence[tuple[str, str]],
+) -> InlineKeyboardMarkup:
     """Return keyboard for choosing swim style."""
 
     rows: list[list[InlineKeyboardButton]] = []
@@ -449,7 +453,9 @@ def build_search_style_keyboard(choices: Sequence[tuple[str, str]]) -> InlineKey
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def build_search_distance_keyboard(choices: Sequence[tuple[str, str]]) -> InlineKeyboardMarkup:
+def build_search_distance_keyboard(
+    choices: Sequence[tuple[str, str]],
+) -> InlineKeyboardMarkup:
     """Return keyboard for choosing sprint distance."""
 
     rows: list[list[InlineKeyboardButton]] = []
