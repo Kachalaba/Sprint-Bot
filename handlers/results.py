@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, Tuple
+from typing import Dict, Sequence, Tuple
 
 from aiogram import Router, types
 from aiogram.filters import Command
 
+from i18n import t
 from role_service import RoleService
 from services import ws_pr, ws_results
 from utils import fmt_time
@@ -92,6 +93,33 @@ async def _resolve_athlete_name(role_service: RoleService, athlete_id: int) -> s
     return f"ID {athlete_id}"
 
 
+def format_result_card(
+    stroke: str,
+    distance: int,
+    *,
+    date: str | None = None,
+    total: float | None = None,
+    sob: float | None = None,
+    splits: Sequence[float] | None = None,
+) -> str:
+    """Compose localized card text for a single result entry."""
+
+    lines = [
+        t("res.card.style", style=stroke),
+        t("res.card.distance", distance=distance),
+    ]
+    if date:
+        lines.append(t("res.card.date", date=date))
+    if total is not None:
+        lines.append(t("res.card.total", total=fmt_time(total)))
+    if sob is not None:
+        lines.append(t("res.card.sob", sob=fmt_time(sob)))
+    if splits:
+        formatted_splits = ", ".join(fmt_time(value) for value in splits)
+        lines.append(t("res.card.splits", splits=formatted_splits))
+    return "\n".join(lines)
+
+
 @router.message(Command("best"))
 async def cmd_best(message: types.Message, role_service: RoleService) -> None:
     """Display personal records and Sum of Best for an athlete."""
@@ -104,37 +132,39 @@ async def cmd_best(message: types.Message, role_service: RoleService) -> None:
             try:
                 target_id = int(value)
             except ValueError:
-                await message.answer("Ідентифікатор спортсмена має бути числом.")
+                await message.answer(t("res.invalid_id"))
                 return
 
     if not await role_service.can_access_athlete(message.from_user.id, target_id):
-        await message.answer("У вас немає доступу до цього спортсмена.")
+        await message.answer(t("error.forbidden"))
         return
 
     totals = _collect_best_totals(target_id)
     segment_bests = _collect_segment_bests(target_id)
     if not totals and not segment_bests:
-        await message.answer("Поки немає рекордів для цього спортсмена.")
+        await message.answer(t("error.not_found"))
         return
 
     athlete_name = await _resolve_athlete_name(role_service, target_id)
-    lines = [f"🏅 Рекорди для <b>{athlete_name}</b> ({target_id})"]
+    lines = [t("res.card.title", name=athlete_name, id=target_id)]
 
     keys = sorted(set(totals) | set(segment_bests), key=lambda item: (item[1], item[0]))
     for stroke, dist in keys:
-        block: list[str] = [f"<b>{stroke}</b>, {dist} м"]
         best_total = totals.get((stroke, dist))
-        if best_total is not None:
-            block.append(f"• Загальний PR: {fmt_time(best_total)}")
         segments_map = segment_bests.get((stroke, dist)) or {}
-        if segments_map:
-            ordered_segments = [segments_map[idx] for idx in sorted(segments_map)]
-            sob = sum(ordered_segments)
-            block.append(f"• Sum of Best: {fmt_time(sob)}")
-            block.append(
-                "• Сегменти: "
-                + ", ".join(fmt_time(value) for value in ordered_segments)
-            )
-        lines.append("\n".join(block))
+        ordered_segments = (
+            [segments_map[idx] for idx in sorted(segments_map)]
+            if segments_map
+            else None
+        )
+        sob_value = sum(ordered_segments) if ordered_segments else None
+        block_text = format_result_card(
+            stroke,
+            dist,
+            total=best_total,
+            sob=sob_value,
+            splits=ordered_segments,
+        )
+        lines.append(block_text)
 
     await message.answer("\n\n".join(lines), parse_mode="HTML")
