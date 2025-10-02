@@ -110,6 +110,24 @@ tpl:
     100_free: "4×25 м. Второй отрезок контрольный, третий — ускорение."
     100_fly: "4×25 м. Держите стабильную технику и темп."
     200_mixed: "По 50 м на каждый стиль: баттерфляй, спина, брасс, кроль."
+expimp:
+  errors:
+    athlete_required: "Нужно указать athlete_id."
+    athlete_invalid: "Некорректное значение athlete_id: {value}."
+    athlete_positive: "athlete_id должен быть положительным."
+    stroke_required: "Нужно указать стиль (stroke)."
+    distance_required: "Нужно указать дистанцию."
+    distance_invalid: "Некорректная дистанция: {value}."
+    distance_positive: "Дистанция должна быть положительной."
+    time_required: "Нужно указать время заплыва."
+    time_format: "Некорректный формат времени: {value}."
+    time_seconds: "Секунды в формате времени должны быть меньше 60."
+    time_non_negative: "Время должно быть неотрицательным."
+    time_positive: "Время должно быть больше нуля."
+    timestamp_required: "Нужно указать timestamp в формате ISO."
+    timestamp_invalid: "Некорректный формат timestamp: {value}."
+    duplicate: "Такой результат уже сохранён; пропуск."
+    generic: "Ошибка импорта: {reason}."
 add:
   step:
     style: "Выберите стиль заплыва:"
