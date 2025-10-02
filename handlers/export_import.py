@@ -10,8 +10,14 @@ from aiogram import F, Router, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (
+    BufferedInputFile,
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
 
+from i18n import t
 from role_service import ROLE_ADMIN, ROLE_TRAINER, RoleService
 from services.io_service import ImportIssue, ImportPreview, ImportRecord, IOService
 from utils.roles import require_roles
@@ -43,7 +49,7 @@ async def export_results(
     user_id = message.from_user.id
     scope = _extract_scope(message.text or "")
     if scope is None:
-        await message.answer("Використання: /export <user|team|all>.")
+        await message.answer(t("expimp.export.usage"))
         return
 
     athlete_ids: tuple[int, ...] | None
@@ -52,30 +58,31 @@ async def export_results(
     elif scope == "team":
         role = await role_service.get_role(user_id)
         if role not in {ROLE_TRAINER, ROLE_ADMIN}:
-            await message.answer("Експорт команди доступний лише тренерам.")
+            await message.answer(t("expimp.export.team_forbidden"))
             return
         accessible = await role_service.get_accessible_athletes(user_id)
         athlete_ids = tuple(sorted(set(int(value) for value in accessible)))
         if not athlete_ids:
-            await message.answer("Немає спортсменів для експорту.")
+            await message.answer(t("expimp.export.team_empty"))
             return
     else:  # scope == "all"
         role = await role_service.get_role(user_id)
         if role != ROLE_ADMIN:
-            await message.answer("Експорт всіх результатів доступний лише адміністраторам.")
+            await message.answer(t("expimp.export.all_forbidden"))
             return
         athlete_ids = None
 
     data = await io_service.export_results(athlete_ids=athlete_ids)
     if not data:
-        await message.answer("Немає результатів для експорту.")
+        await message.answer(t("expimp.export.no_results"))
         return
 
     file_name = _build_file_name(scope)
     document = BufferedInputFile(data, filename=file_name)
+    await message.answer(t("expimp.export.sending"))
     await message.answer_document(
         document,
-        caption=f"Всього записів: {_count_rows(data)}",
+        caption=t("expimp.export.summary", count=_count_rows(data)),
     )
 
 
@@ -85,9 +92,7 @@ async def start_import(message: types.Message, state: FSMContext) -> None:
 
     await state.clear()
     await state.set_state(ImportStates.waiting_file)
-    await message.answer(
-        "Надішліть CSV-файл у форматі UTF-8. Спочатку виконується перевірка (dry-run)."
-    )
+    await message.answer(t("expimp.import.prompt"))
 
 
 @router.message(ImportStates.waiting_file, F.document)
@@ -100,13 +105,13 @@ async def handle_import_file(
 
     document = message.document
     if document is None:
-        await message.answer("Очікується файл формату CSV.")
+        await message.answer(t("expimp.import.expect_file"))
         return
     if document.file_name and not document.file_name.lower().endswith(".csv"):
-        await message.answer("Потрібен файл з розширенням .csv.")
+        await message.answer(t("expimp.import.invalid_ext"))
         return
     if document.file_size and document.file_size > 5 * 1024 * 1024:
-        await message.answer("Файл завеликий. Обмеження — 5 МБ.")
+        await message.answer(t("expimp.import.too_large"))
         return
     buffer = io.BytesIO()
     await message.bot.download(document, destination=buffer)
@@ -132,12 +137,14 @@ async def confirm_import(
     data = await state.get_data()
     preview = _deserialize_preview(data.get("preview"))
     if preview is None:
-        await callback.message.edit_text("Сесія імпорту не знайдена. Повторіть команду /import_csv.")
+        await callback.message.edit_text(
+            t("expimp.import.session_missing", command="/import_csv"),
+        )
         await state.clear()
         return
     if not preview.rows:
         await callback.message.edit_text(
-            "Немає валідних рядків для імпорту. Надішліть новий файл /import_csv.",
+            t("expimp.import.no_valid_rows", command="/import_csv"),
             reply_markup=None,
         )
         await state.clear()
@@ -146,18 +153,16 @@ async def confirm_import(
     actor_id = callback.from_user.id if callback.from_user else None
     result = await io_service.apply_import(preview, user_id=actor_id)
     await state.clear()
-    await callback.message.edit_text(
-        _format_result(preview, result), reply_markup=None
-    )
+    await callback.message.edit_text(_format_result(preview, result), reply_markup=None)
 
 
 @router.callback_query(ImportStates.confirm, F.data == CANCEL_CALLBACK)
 async def cancel_import(callback: CallbackQuery, state: FSMContext) -> None:
     """Abort import process and clear state."""
 
-    await callback.answer("Імпорт скасовано")
+    await callback.answer(t("expimp.import.cancelled_toast"))
     await state.clear()
-    await callback.message.edit_text("Імпорт скасовано.", reply_markup=None)
+    await callback.message.edit_text(t("expimp.import.cancelled"), reply_markup=None)
 
 
 def _extract_scope(text: str) -> str | None:
@@ -176,29 +181,66 @@ def _build_file_name(scope: str) -> str:
 
 
 def _format_preview(preview: ImportPreview) -> str:
+    issue_count = len(preview.issues)
     lines = [
-        "Результат перевірки CSV:",
-        f"• Рядків у файлі: {preview.total_rows}",
-        f"• Готово до імпорту: {len(preview.rows)}",
-        f"• З помилками/дублікатами: {len(preview.issues)}",
+        t("expimp.dry_run.title"),
+        (
+            t(
+                "expimp.dry_run.status.errors",
+                count=issue_count,
+            )
+            if issue_count
+            else t("expimp.dry_run.status.ok")
+        ),
+        t("expimp.dry_run.total", count=preview.total_rows),
+        t("expimp.dry_run.ready", count=len(preview.rows)),
+        t("expimp.dry_run.invalid", count=issue_count),
     ]
-    if preview.issues:
-        lines.append("\nПроблеми:")
+    if issue_count:
+        lines.append("")
+        lines.append(t("expimp.dry_run.issues_title"))
         for issue in preview.issues[:10]:
-            lines.append(f"  · рядок {issue.row_number}: {issue.message}")
-        if len(preview.issues) > 10:
-            lines.append(f"… та ще {len(preview.issues) - 10} рядків")
-    return "\n".join(lines)
+            lines.append(
+                t(
+                    "expimp.dry_run.issue_line",
+                    row=issue.row_number,
+                    reason=issue.message,
+                )
+            )
+        if issue_count > 10:
+            lines.append(
+                t(
+                    "expimp.dry_run.issue_more",
+                    count=issue_count - 10,
+                )
+            )
+    lines.append("")
+    lines.append(t("expimp.import.confirm_question"))
+    return "\n".join(lines).strip()
 
 
 def _build_preview_keyboard(preview: ImportPreview) -> InlineKeyboardMarkup | None:
     if preview.rows:
         buttons = [
-            [InlineKeyboardButton(text="✅ Підтвердити", callback_data=CONFIRM_CALLBACK)],
-            [InlineKeyboardButton(text="✖️ Скасувати", callback_data=CANCEL_CALLBACK)],
+            [
+                InlineKeyboardButton(
+                    text=t("expimp.buttons.confirm"), callback_data=CONFIRM_CALLBACK
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=t("expimp.buttons.cancel"), callback_data=CANCEL_CALLBACK
+                )
+            ],
         ]
     else:
-        buttons = [[InlineKeyboardButton(text="✖️ Закрити", callback_data=CANCEL_CALLBACK)]]
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    text=t("expimp.buttons.close"), callback_data=CANCEL_CALLBACK
+                )
+            ]
+        ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -262,13 +304,15 @@ def _format_result(preview: ImportPreview, result: Any) -> str:
         1 for issue in preview.issues if "duplicate" in issue.message
     )
     error_rows = max(len(preview.issues) - duplicate_issues, 0)
-    return (
-        "Імпорт завершено.\n"
-        f"• Оброблено рядків: {preview.total_rows}\n"
-        f"• Додано записів: {inserted}\n"
-        f"• Пропущено (дублікатів): {skipped + duplicate_issues}\n"
-        + (f"• Залишилось з помилками: {error_rows}" if error_rows else "")
-    )
+    lines = [
+        t("expimp.result.title"),
+        t("expimp.result.processed", count=preview.total_rows),
+        t("expimp.result.inserted", count=inserted),
+        t("expimp.result.skipped", count=skipped + duplicate_issues),
+    ]
+    if error_rows:
+        lines.append(t("expimp.result.errors", count=error_rows))
+    return "\n".join(lines)
 
 
 def _count_rows(data: bytes) -> int:
