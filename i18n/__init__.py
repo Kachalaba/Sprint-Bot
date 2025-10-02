@@ -106,6 +106,7 @@ def t(key: str, *, lang: str | None = None, **kwargs: Any) -> str:
     except KeyError as exc:  # pragma: no cover - defensive branch
         raise KeyError(f"Missing translation for '{key}' in '{language}'") from exc
 
+    template = template.replace("\\n", "\n")
     if kwargs:
         return template.format(**kwargs)
     return template
