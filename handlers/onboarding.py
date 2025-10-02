@@ -13,12 +13,13 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
 from handlers.menu import build_menu_keyboard
+from i18n import reset_context_language, set_context_language, t
 from keyboards import (
+    OnboardingLanguageCB,
+    OnboardingRoleCB,
     get_onboarding_language_keyboard,
     get_onboarding_role_keyboard,
     get_onboarding_skip_keyboard,
-    OnboardingLanguageCB,
-    OnboardingRoleCB,
 )
 from role_service import ROLE_ATHLETE, ROLE_TRAINER, RoleService
 from services.user_service import UserProfile, UserService
@@ -31,8 +32,8 @@ _NAME_PATTERN = re.compile(r"^[A-Za-zА-Яа-яЁёІіЇїЄєҐґ0-9'’`\-\.\
 _MIN_NAME_LENGTH = 2
 _MAX_NAME_LENGTH = 64
 
-_LANGUAGE_LABELS = {"uk": "Українська", "ru": "Русский"}
-_ROLE_LABELS = {ROLE_TRAINER: "Тренер", ROLE_ATHLETE: "Спортсмен"}
+_LANGUAGE_KEYS = {"uk": "onb.languages.uk", "ru": "onb.languages.ru"}
+_ROLE_KEYS = {ROLE_TRAINER: "onb.roles.trainer", ROLE_ATHLETE: "onb.roles.athlete"}
 
 
 class Onboarding(StatesGroup):
@@ -59,17 +60,38 @@ def _validate_name(value: str) -> Optional[str]:
     return cleaned
 
 
+def _translate_or_default(key: str | None, default: str) -> str:
+    if not key:
+        return default
+    try:
+        return t(key)
+    except KeyError:
+        return default
+
+
 def _format_profile(profile: UserProfile) -> str:
-    role_label = _ROLE_LABELS.get(profile.role, profile.role.title())
-    language_label = _LANGUAGE_LABELS.get(profile.language, profile.language)
-    group_line = profile.group_name or "—"
-    return (
-        "Ваш профиль готов!\n"
-        f"Роль: <b>{role_label}</b>\n"
-        f"Имя: <b>{profile.full_name}</b>\n"
-        f"Группа: <b>{group_line}</b>\n"
-        f"Язык: <b>{language_label}</b>"
+    profile_language = profile.language or "uk"
+    translation_language = (
+        profile_language if profile_language in _LANGUAGE_KEYS else "uk"
     )
+    token = set_context_language(translation_language)
+    try:
+        role_label = _translate_or_default(
+            _ROLE_KEYS.get(profile.role), profile.role.title()
+        )
+        language_label = _translate_or_default(
+            _LANGUAGE_KEYS.get(profile_language), profile_language
+        )
+        group_line = profile.group_name or "—"
+        template = t("onb.profile_card")
+        return template.format(
+            name=profile.full_name,
+            role=role_label,
+            group=group_line,
+            lang=language_label,
+        )
+    finally:
+        reset_context_language(token)
 
 
 @router.message(CommandStart())
@@ -93,8 +115,7 @@ async def start_onboarding(
 
     await state.set_state(Onboarding.choosing_role)
     await message.answer(
-        "Привет! Давайте настроим ваш профиль. Выберите вашу роль:",
-        reply_markup=get_onboarding_role_keyboard(),
+        t("onb.choose_role"), reply_markup=get_onboarding_role_keyboard()
     )
     return
 
@@ -111,9 +132,7 @@ async def process_role(
     await state.update_data(role=role)
     await state.set_state(Onboarding.entering_name)
     await callback.message.edit_reply_markup()
-    await callback.message.answer(
-        "Отлично! Теперь введите ваше имя и фамилию (2-64 символа, без спецсимволов)."
-    )
+    await callback.message.answer(t("onb.enter_name"))
     await callback.answer()
 
 
@@ -124,23 +143,19 @@ async def process_name(message: Message, state: FSMContext) -> None:
     name = message.text or ""
     cleaned = _validate_name(name)
     if not cleaned:
-        await message.answer(
-            "Имя должно содержать от 2 до 64 символов и не включать спецсимволы."
-        )
+        await message.answer(t("error.name_invalid"))
         return
     await state.update_data(full_name=cleaned)
     await state.set_state(Onboarding.entering_group)
     await message.answer(
-        "Укажите группу/клуб (опционально) или пропустите шаг:",
-        reply_markup=get_onboarding_skip_keyboard(),
+        t("onb.group_hint"), reply_markup=get_onboarding_skip_keyboard()
     )
 
 
 async def _proceed_to_language(state: FSMContext, message: Message) -> None:
     await state.set_state(Onboarding.choosing_language)
     await message.answer(
-        "Выберите язык интерфейса:",
-        reply_markup=get_onboarding_language_keyboard(),
+        t("onb.choose_lang"), reply_markup=get_onboarding_language_keyboard()
     )
 
 
@@ -213,4 +228,4 @@ async def process_language(
         await callback.message.answer(
             "Профиль сохранён.", reply_markup=build_menu_keyboard(role)
         )
-    await callback.answer("Готово!")
+    await callback.answer(t("common.done"))
