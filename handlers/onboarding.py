@@ -172,7 +172,7 @@ async def process_group(message: Message, state: FSMContext) -> None:
             await state.update_data(group_name=cleaned[:80])
         else:
             await state.update_data(group_name=None)
-    await message.answer("Шаг сохранён.")
+    await message.answer(t("user.step_saved"))
     await _proceed_to_language(state, message)
 
 
@@ -182,7 +182,7 @@ async def skip_group_callback(callback: CallbackQuery, state: FSMContext) -> Non
 
     await state.update_data(group_name=None)
     await callback.message.edit_reply_markup()
-    await callback.answer("Пропущено")
+    await callback.answer(t("user.step_skipped"))
     await _proceed_to_language(state, callback.message)
 
 
@@ -205,7 +205,7 @@ async def process_language(
 
     if not full_name:
         logger.warning("Missing name in onboarding state for %s", user_id)
-        await callback.answer("Произошла ошибка, начните заново.", show_alert=True)
+        await callback.answer(t("user.onboarding_restart"), show_alert=True)
         await state.clear()
         return
 
@@ -226,6 +226,6 @@ async def process_language(
         )
     else:
         await callback.message.answer(
-            "Профиль сохранён.", reply_markup=build_menu_keyboard(role)
+            t("user.profile_saved"), reply_markup=build_menu_keyboard(role)
         )
-    await callback.answer(t("common.done"))
+    await callback.answer(t("user.language_changed"))
