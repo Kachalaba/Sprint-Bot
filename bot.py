@@ -22,6 +22,7 @@ from handlers.notifications import router as notifications_router
 from handlers.onboarding import router as onboarding_router
 from handlers.progress import router as progress_router
 from handlers.reports import router as reports_router
+from handlers.search import router as search_router
 from handlers.registration import router as registration_router
 from handlers.results import router as results_router
 from handlers.sprint_actions import router as sprint_router
@@ -30,6 +31,7 @@ from middlewares.roles import RoleMiddleware
 from notifications import NotificationService
 from role_service import RoleService
 from services import ADMIN_IDS, bot
+from services.query_service import QueryService
 from services.user_service import UserService
 from template_service import TemplateService
 
@@ -98,6 +100,7 @@ def setup_dispatcher(
     dp.include_router(admin_router)
     dp.include_router(progress_router)
     dp.include_router(reports_router)
+    dp.include_router(search_router)
     dp.include_router(results_router)
     dp.include_router(sprint_router)
     dp.include_router(templates_router)
@@ -125,6 +128,8 @@ async def main() -> None:
     await user_service.init()
     template_service = TemplateService()
     await template_service.init()
+    query_service = QueryService()
+    await query_service.init()
     backup_service = BackupService(
         bot=bot,
         db_path=Path(os.getenv("CHAT_DB_PATH", DB_PATH)),
@@ -145,6 +150,7 @@ async def main() -> None:
         role_service=role_service,
         user_service=user_service,
         template_service=template_service,
+        query_service=query_service,
     )
 
 
