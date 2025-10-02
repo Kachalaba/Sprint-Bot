@@ -222,7 +222,7 @@ def build_audit_entry_keyboard(op_id: int) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="↩️ Відкотити",
+                    text=t("audit.btn.undo"),
                     callback_data=AuditUndoCB(op_id=op_id).pack(),
                 )
             ]
