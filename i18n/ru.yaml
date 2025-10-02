@@ -197,6 +197,7 @@ search:
   title: "🔎 Результаты поиска"
   empty: "По заданным фильтрам ничего не найдено."
   page: "Страница {cur} из {total}"
+  item_fmt: "{idx}. {timestamp} • {distance} • {stroke}\n   👤 {athlete} ({athlete_id})\n   ⏱ {total}{pr_flag}"
   report_btn: "Отчёт #{idx}"
   prev: "◀️ Назад"
   next: "Вперёд ▶️"

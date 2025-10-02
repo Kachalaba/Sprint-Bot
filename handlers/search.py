@@ -398,14 +398,19 @@ def _format_results(page: SearchPage, data: Mapping[str, Any]) -> str:
         athlete_name = item.athlete_name or f"ID {item.athlete_id}"
         timestamp = item.timestamp.strftime("%d.%m.%Y %H:%M")
         pr_flag = t("search.card.pr_flag") if item.is_pr else ""
-        card = "\n".join(
-            [
-                f"{idx}. {timestamp} • {distance_label} • {style_label}",
-                f"   👤 {athlete_name} ({item.athlete_id})",
-                f"   ⏱ {fmt_time(item.total_seconds)}{pr_flag}",
-            ]
+        parts.append(
+            t(
+                "search.item_fmt",
+                idx=idx,
+                timestamp=timestamp,
+                distance=distance_label,
+                stroke=style_label,
+                athlete=athlete_name,
+                athlete_id=item.athlete_id,
+                total=fmt_time(item.total_seconds),
+                pr_flag=pr_flag,
+            )
         )
-        parts.append(card)
     return "\n\n".join(parts)
 
 
