@@ -223,6 +223,46 @@ report:
     forbidden: "У вас нет доступа к этому спортсмену."
     no_results: "Для спортсмена ещё нет зафиксированных результатов."
     empty_report: "Не удалось сгенерировать отчёт для пустого результата."
+expimp:
+  export:
+    usage: "Использование: /export <user|team|all>."
+    sending: "Отправляю CSV…"
+    team_forbidden: "Экспорт команды доступен только тренерам."
+    team_empty: "Нет спортсменов для экспорта."
+    all_forbidden: "Экспорт всех результатов доступен только администраторам."
+    no_results: "Нет результатов для экспорта."
+    summary: "Всего записей: {count}"
+  import:
+    prompt: "Загрузите CSV-файл в кодировке UTF-8. Сначала выполняется проверка (dry-run)."
+    expect_file: "Ожидается файл формата CSV."
+    invalid_ext: "Нужен файл с расширением .csv."
+    too_large: "Файл слишком большой. Лимит — 5 МБ."
+    session_missing: "Сессия импорта не найдена. Повторите команду {command}."
+    no_valid_rows: "Нет валидных строк для импорта. Отправьте новый файл {command}."
+    cancelled_toast: "Импорт отменён"
+    cancelled: "Импорт отменён."
+    confirm_question: "Подтвердить импорт?"
+  dry_run:
+    title: "Результат проверки CSV:"
+    status:
+      ok: "Dry-run: ошибок не обнаружено."
+      errors: "Dry-run: найдено проблем — {count}."
+    total: "• Строк в файле: {count}"
+    ready: "• Готово к импорту: {count}"
+    invalid: "• С ошибками/дубликатами: {count}"
+    issues_title: "Проблемы:"
+    issue_line: "  · строка {row}: причина — {reason}"
+    issue_more: "… и ещё {count} строк"
+  buttons:
+    confirm: "✅ Подтвердить"
+    cancel: "✖️ Отменить"
+    close: "✖️ Закрыть"
+  result:
+    title: "Импорт завершён."
+    processed: "• Обработано строк: {count}"
+    inserted: "• Добавлено записей: {count}"
+    skipped: "• Пропущено (дубликатов): {count}"
+    errors: "• Осталось с ошибками: {count}"
 search:
   title: "🔎 Результаты поиска"
   empty: "По заданным фильтрам ничего не найдено."
