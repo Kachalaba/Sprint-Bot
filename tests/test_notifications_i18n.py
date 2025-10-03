@@ -150,4 +150,11 @@ def test_service_notices_translated(
     assert notification_service.quiet_hours_notice(lang=lang) == t(
         "note.quiet_hours", lang=lang
     )
-    assert notification_service.info_notice(lang=lang) == t("note.info", lang=lang)
+    assert notification_service.info_notice(lang=lang) == t(
+        "note.info",
+        lang=lang,
+        quiet_window=t("note.info_quiet_disabled", lang=lang),
+        local_time="—",
+        quiet_state="—",
+        subscription=t("note.info_subscription_always", lang=lang),
+    )

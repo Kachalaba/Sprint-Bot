@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+import os
+from datetime import datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 from aiogram import Router, types
 from aiogram.filters import Command
 
-from notifications import NotificationService
+from i18n import t
+from notifications import QUIET_HOURS_WINDOW, NotificationService, is_quiet_now
+
+_DEFAULT_TIMEZONE = "Europe/Kyiv"
+_TIMEZONE_ENV_VAR = "QUIET_HOURS_TZ"
 
 router = Router()
 
@@ -39,27 +47,54 @@ async def disable_notifications(
     await message.answer(text)
 
 
+def _resolve_timezone() -> tuple[str, ZoneInfo]:
+    tz_name = os.getenv(_TIMEZONE_ENV_VAR, _DEFAULT_TIMEZONE)
+    try:
+        return tz_name, ZoneInfo(tz_name)
+    except ZoneInfoNotFoundError:
+        fallback = "UTC"
+        return fallback, ZoneInfo(fallback)
+
+
+def _format_quiet_window() -> str:
+    if QUIET_HOURS_WINDOW is None:
+        return t("note.info_quiet_disabled")
+    start, end = QUIET_HOURS_WINDOW
+    return t(
+        "note.info_quiet_enabled",
+        start=start.strftime("%H:%M"),
+        end=end.strftime("%H:%M"),
+    )
+
+
 @router.message(Command("notify_info"))
 async def notification_info(
     message: types.Message, notifications: NotificationService
 ) -> None:
-    """Share current notification settings and schedule details."""
+    """Share current notification settings, quiet hours, and subscription status."""
 
-    subscribed = await notifications.is_subscribed(message.chat.id)
-    status = "увімкнено ✅" if subscribed else "вимкнено ❌"
+    tz_name, tzinfo = _resolve_timezone()
+    now_local = datetime.now(tzinfo)
+    quiet_now = await is_quiet_now(tz=tz_name)
 
-    schedule = notifications.describe_schedule()
-    next_run = notifications.next_sprint_run()
-    weekday = notifications.weekday_name(next_run.weekday())
-    next_label = f"{weekday}, {next_run:%d.%m о %H:%M}"
+    quiet_state_key = "note.info_state_quiet" if quiet_now else "note.info_state_active"
+    quiet_state = t(quiet_state_key)
 
-    text = (
-        "<b>Нагадування SprintBot</b>\n"
-        f"Статус: {status}\n"
-        f"{schedule}\n"
-        f"Найближче нагадування: {next_label}.\n\n"
-        "Команди:\n"
-        "• /notify_on — увімкнути сповіщення\n"
-        "• /notify_off — вимкнути сповіщення"
+    try:
+        subscribed = await notifications.is_subscribed(message.chat.id)
+    except AttributeError:
+        subscription_key = "note.info_subscription_always"
+    else:
+        subscription_key = (
+            "note.info_subscription_on" if subscribed else "note.info_subscription_off"
+        )
+    subscription_status = t(subscription_key)
+
+    text = t(
+        "note.info",
+        quiet_window=_format_quiet_window(),
+        local_time=f"{now_local:%H:%M} ({tz_name})",
+        quiet_state=quiet_state,
+        subscription=subscription_status,
     )
     await message.answer(text)
