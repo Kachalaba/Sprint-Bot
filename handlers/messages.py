@@ -155,7 +155,9 @@ async def _show_threads(
             if athlete_id in accessible_ids
         ]
     else:
-        title_fn = lambda value: f"Тренер {value}"
+        def title_fn(value: str) -> str:
+            return f"Тренер {value}"
+
         header = "<b>Ваші тренери</b>"
         empty_hint = "Поки що немає повідомлень від тренера."
         fallback = empty_hint

@@ -9,7 +9,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Sequence
 
 from i18n import t
 from services.audit_service import AuditService
@@ -62,10 +62,10 @@ class ImportValidationError(ValueError):
 
     __slots__ = ("key", "params")
 
-    def __init__(self, key: str, **params: object) -> None:
+    def __init__(self, key: str, **params: Any) -> None:
         super().__init__(key)
         self.key = key
-        self.params = params
+        self.params: dict[str, Any] = params
 
 
 @dataclass(frozen=True, slots=True)
@@ -350,7 +350,10 @@ class IOService:
                         int(record.is_pr),
                     ),
                 )
-                row_id = int(cursor.lastrowid)
+                row_id_raw = cursor.lastrowid
+                if row_id_raw is None:  # pragma: no cover - defensive branch
+                    raise RuntimeError("Failed to obtain inserted row id")
+                row_id = int(row_id_raw)
                 created.append(
                     {
                         "id": row_id,

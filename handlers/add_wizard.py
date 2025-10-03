@@ -67,7 +67,6 @@ def _generate_segment_templates(distance: int) -> tuple[SegmentTemplate, ...]:
     templates: list[SegmentTemplate] = []
     for segments in sorted(candidates, key=lambda item: (-len(item), item[0])):
         parts = len(segments)
-        segment_label = " + ".join(f"{value:g} м" for value in segments)
         templates.append(
             SegmentTemplate(
                 label=f"{parts}×{segments[0]:g} м" if parts > 1 else f"{distance} м",

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from typing import Iterable, List, Tuple
+from typing import List, Tuple
 from unittest.mock import AsyncMock
 
 from aiogram.fsm.context import FSMContext

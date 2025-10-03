@@ -1,5 +1,7 @@
 # Sprint-Bot
 
+[![CI](https://github.com/Kachalaba/Sprint-Bot/actions/workflows/ci.yml/badge.svg)](https://github.com/Kachalaba/Sprint-Bot/actions/workflows/ci.yml)
+
 Sprint-Bot — Telegram-бот на основе **Python** и **aiogram 3**, позволяющий создавать и проходить спортивные «спринты». Бот подойдет спортсменам и тренерам, которые хотят организовать совместные челленджи и следить за прогрессом участников.
 
 ## Основные функции
