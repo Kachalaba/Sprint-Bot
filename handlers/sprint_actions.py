@@ -38,7 +38,7 @@ from keyboards import (
     unpack_timestamp_from_callback,
 )
 from notifications import NotificationService
-from role_service import ROLE_ATHLETE, ROLE_TRAINER, RoleService
+from role_service import ROLE_ATHLETE, RoleService
 from services import ws_athletes, ws_log, ws_pr, ws_results
 from services.stats_service import SobStats, calc_segment_prs, calc_sob, calc_total_pr
 from template_service import SprintTemplate, TemplateService
@@ -585,7 +585,6 @@ async def collect(message: types.Message, state: FSMContext) -> None:
     """Collect segment times and save result."""
 
     data = await state.get_data()
-    athlete_id = data.get("athlete_id", message.from_user.id)
     dist, idx, splits = data["dist"], data["idx"], data["splits"]
     raw_segments = data.get("segments") or get_segments(dist)
     segments = [float(seg) for seg in raw_segments]

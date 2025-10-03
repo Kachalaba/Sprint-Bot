@@ -3,8 +3,6 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-import pytest
-
 from handlers.onboarding import _format_profile, _validate_name
 from role_service import ROLE_ATHLETE, ROLE_TRAINER
 from services.user_service import UserProfile, UserService

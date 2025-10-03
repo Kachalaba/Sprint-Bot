@@ -62,7 +62,7 @@ def fmt_time(seconds: float) -> str:
     return f"{int(m)}:{s:05.2f}" if m else f"{s:.2f}"
 
 
-def get_segments(dist: int) -> list[int]:
+def get_segments(dist: int) -> list[float]:
     """Calculate segment lengths for sprint analysis."""
 
     if dist == 50:
@@ -70,14 +70,14 @@ def get_segments(dist: int) -> list[int]:
         return [12.5, 12.5, 12.5, 12.5]
     if dist == 100:
         # Сотка - это классические 4 по 25м
-        return [25, 25, 25, 25]
+        return [25.0, 25.0, 25.0, 25.0]
     if dist >= 200:
         # 200м и длиннее - анализируем по "полтинникам"
         num_segments = dist // 50
-        return [50] * num_segments
+        return [50.0] * num_segments
 
     # На случай, если дистанция не стандартная (например, 75м)
-    return [dist]
+    return [float(dist)]
 
 
 def pr_key(uid: int, stroke: str, dist: int, seg_idx: int) -> str:
