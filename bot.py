@@ -1,43 +1,61 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import os
 from contextlib import suppress
 from datetime import timedelta
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from time import perf_counter
 
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable
 
-from aiogram import Bot, Dispatcher
-from aiogram.types import BotCommand
+from aiogram import BaseMiddleware, Bot, Dispatcher
+from aiogram.types import BotCommand, Message, TelegramObject
 
 from i18n import t
+from utils.logger import get_logger
 
 if TYPE_CHECKING:
     from backup_service import BackupService
     from notifications import NotificationService, drain_queue
 
-LOG_DIR = "logs"
-LOG_FILE = os.path.join(LOG_DIR, "bot.log")
-LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
+logger = get_logger(__name__)
 
-os.makedirs(LOG_DIR, exist_ok=True)
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+Handler = Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]]
 
-file_handler = RotatingFileHandler(LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=3)
-file_handler.setLevel(logging.INFO)
-file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
 
-stream_handler = logging.StreamHandler()
-stream_handler.setLevel(logging.WARNING)
-stream_handler.setFormatter(logging.Formatter(LOG_FORMAT))
+class CommandLoggingMiddleware(BaseMiddleware):
+    """Emit structured logs around command handler execution."""
 
-logger.addHandler(file_handler)
-logger.addHandler(stream_handler)
+    def __init__(self, logger_instance):
+        self._logger = logger_instance
+
+    async def __call__(
+        self, handler: Handler, event: TelegramObject, data: Dict[str, Any]
+    ) -> Any:
+        if isinstance(event, Message) and event.text and event.text.startswith("/"):
+            user = event.from_user
+            user_id = user.id if user else None
+            cmd = event.text.split()[0]
+            start = perf_counter()
+            self._logger.info(
+                "command_start",
+                extra={"user_id": user_id, "cmd": cmd, "latency_ms": None},
+            )
+            try:
+                return await handler(event, data)
+            finally:
+                latency_ms = (perf_counter() - start) * 1000
+                self._logger.info(
+                    "command_complete",
+                    extra={
+                        "user_id": user_id,
+                        "cmd": cmd,
+                        "latency_ms": round(latency_ms, 2),
+                    },
+                )
+        return await handler(event, data)
 
 
 SUPPORTED_LANGUAGES: tuple[str, ...] = ("uk", "ru")
@@ -157,6 +175,7 @@ def setup_dispatcher(
     from handlers.templates import router as templates_router
 
     dp = Dispatcher()
+    dp.update.middleware(CommandLoggingMiddleware(logger))
     dp.include_router(registration_router)
     dp.include_router(onboarding_router)
     dp.include_router(menu_router)
