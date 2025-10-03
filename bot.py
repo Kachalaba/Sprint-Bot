@@ -6,7 +6,6 @@ from contextlib import suppress
 from datetime import timedelta
 from pathlib import Path
 from time import perf_counter
-
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable
 
 from aiogram import BaseMiddleware, Bot, Dispatcher
@@ -14,12 +13,19 @@ from aiogram.types import BotCommand, Message, TelegramObject
 
 from i18n import t
 from utils.logger import get_logger
+from utils.sentry import init_sentry
 
 if TYPE_CHECKING:
     from backup_service import BackupService
     from notifications import NotificationService, drain_queue
 
 logger = get_logger(__name__)
+
+_SENTRY_ENABLED = init_sentry()
+if _SENTRY_ENABLED:
+    logger.info("Sentry successfully initialised")
+else:
+    logger.info("Sentry DSN not provided; Sentry disabled")
 
 
 Handler = Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]]
@@ -104,9 +110,7 @@ async def configure_bot_commands(bot_instance: Bot) -> None:
     """Configure command list for supported languages."""
 
     default_commands = list(
-        _build_bot_commands(
-            get_bot_command_translations(lang=_DEFAULT_LANGUAGE)
-        )
+        _build_bot_commands(get_bot_command_translations(lang=_DEFAULT_LANGUAGE))
     )
     await bot_instance.set_my_commands(default_commands)
 
@@ -249,9 +253,7 @@ async def main() -> None:
     dp = setup_dispatcher(notification_service, backup_service)
     dp.update.middleware(RoleMiddleware(role_service))
     await configure_bot_commands(bot)
-    queue_task = asyncio.create_task(
-        drain_queue(), name="notification-queue-drain"
-    )
+    queue_task = asyncio.create_task(drain_queue(), name="notification-queue-drain")
     try:
         await dp.start_polling(
             bot,
