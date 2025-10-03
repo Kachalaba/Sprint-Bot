@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import os
 from asyncio import QueueEmpty
 from dataclasses import dataclass
@@ -13,8 +12,9 @@ from aiogram import Bot
 
 from i18n import t
 from utils import fmt_time, speed
+from utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass(slots=True)
@@ -131,7 +131,14 @@ async def send_notification(
     )
     if await is_quiet_now():
         await NOTIFICATION_QUEUE.put(notification)
-        logger.info("Queued notification for chat %s due to quiet hours", chat_id)
+        logger.info(
+            "notification_queued",
+            extra={
+                "user_id": chat_id,
+                "cmd": "notification",
+                "latency_ms": None,
+            },
+        )
         return
     await _deliver_notification(notification)
 
@@ -143,12 +150,25 @@ async def _deliver_notification(notification: QueuedNotification) -> None:
             text=notification.text,
             **notification.kwargs,
         )
+        logger.info(
+            "notification_delivered",
+            extra={
+                "user_id": notification.chat_id,
+                "cmd": "notification",
+                "latency_ms": None,
+            },
+        )
     except Exception as exc:  # pragma: no cover - network dependent
         logger.warning(
             "Failed to deliver notification to %s: %s",
             notification.chat_id,
             exc,
             exc_info=True,
+            extra={
+                "user_id": notification.chat_id,
+                "cmd": "notification",
+                "latency_ms": None,
+            },
         )
 
 
