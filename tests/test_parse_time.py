@@ -2,7 +2,13 @@ import math
 
 import pytest
 
-from utils.parse_time import parse_splits, parse_total, validate_splits
+from utils.parse_time import (
+    ParseTimeError,
+    ParseTimeErrorCode,
+    parse_splits,
+    parse_total,
+    validate_splits,
+)
 
 
 @pytest.mark.parametrize(
@@ -26,8 +32,9 @@ def test_parse_total_valid_formats(raw: str, expected: float) -> None:
     ["", "abc", "1:65", "-1:00", "1:05:30"],
 )
 def test_parse_total_invalid_formats(raw: str) -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ParseTimeError) as exc:
         parse_total(raw)
+    assert exc.value.code is ParseTimeErrorCode.INVALID_TIME
 
 
 def test_parse_splits_mixed_formats() -> None:
@@ -36,17 +43,19 @@ def test_parse_splits_mixed_formats() -> None:
 
 
 @pytest.mark.parametrize(
-    "items",
+    "items,code",
     [
-        [""],
-        ["not-a-time"],
-        [-1.0],
-        ["0:30.00", -0.1],
+        ([""], ParseTimeErrorCode.INVALID_TIME),
+        (["not-a-time"], ParseTimeErrorCode.INVALID_TIME),
+        ([-1.0], ParseTimeErrorCode.INVALID_TIME),
+        (["0:30.00", -0.1], ParseTimeErrorCode.INVALID_TIME),
+        ([object()], ParseTimeErrorCode.INVALID_INPUT),
     ],
 )
-def test_parse_splits_invalid(items: list[object]) -> None:
-    with pytest.raises(ValueError):
+def test_parse_splits_invalid(items: list[object], code: ParseTimeErrorCode) -> None:
+    with pytest.raises(ParseTimeError) as exc:
         parse_splits(items)  # type: ignore[arg-type]
+    assert exc.value.code is code
 
 
 def test_validate_splits_within_tolerance() -> None:
@@ -61,8 +70,10 @@ def test_validate_splits_within_tolerance() -> None:
     ],
 )
 def test_validate_splits_mismatch(total: float, splits: list[float]) -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ParseTimeError) as exc:
         validate_splits(total, splits, tol=0.20)
+    assert exc.value.code is ParseTimeErrorCode.SPLITS_MISMATCH
+    assert "diff" in exc.value.context
 
 
 @pytest.mark.parametrize(
@@ -70,5 +81,12 @@ def test_validate_splits_mismatch(total: float, splits: list[float]) -> None:
     [(-1.0, [30.0]), (60.0, [30.0, -1.0])],
 )
 def test_validate_splits_negative_values(total: float, splits: list[float]) -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ParseTimeError) as exc:
         validate_splits(total, splits)
+    assert exc.value.code is ParseTimeErrorCode.INVALID_TIME
+
+
+def test_validate_splits_negative_tolerance() -> None:
+    with pytest.raises(ParseTimeError) as exc:
+        validate_splits(58.6, [30.0, 28.7], tol=-0.1)
+    assert exc.value.code is ParseTimeErrorCode.INVALID_INPUT

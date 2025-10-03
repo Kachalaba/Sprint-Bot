@@ -4,13 +4,21 @@ from __future__ import annotations
 
 from aiogram.fsm.state import State, StatesGroup
 
-from .parse_time import parse_splits, parse_total, validate_splits
+from .parse_time import (
+    ParseTimeError,
+    ParseTimeErrorCode,
+    parse_splits,
+    parse_total,
+    validate_splits,
+)
 
 __all__ = [
     "AddResult",
     "TemplateStates",
     "fmt_time",
     "get_segments",
+    "ParseTimeError",
+    "ParseTimeErrorCode",
     "parse_splits",
     "parse_total",
     "pr_key",
