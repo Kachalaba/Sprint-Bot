@@ -61,7 +61,9 @@ def _queue_interval_from_env(default: float = _DEFAULT_QUEUE_INTERVAL) -> float:
         seconds = float(raw_value)
     except ValueError:
         logger.warning(
-            "Invalid QUIET_QUEUE_INTERVAL=%s provided, using default %s", raw_value, default
+            "Invalid QUIET_QUEUE_INTERVAL=%s provided, using default %s",
+            raw_value,
+            default,
         )
         return default
     if seconds <= 0:
@@ -443,7 +445,14 @@ class NotificationService:
     def info_notice(self, *, lang: str | None = None) -> str:
         """Return localized informational notice."""
 
-        return t("note.info", lang=lang)
+        return t(
+            "note.info",
+            lang=lang,
+            quiet_window=t("note.info_quiet_disabled", lang=lang),
+            local_time="—",
+            quiet_state="—",
+            subscription=t("note.info_subscription_always", lang=lang),
+        )
 
     def _build_broadcast_message(
         self,
