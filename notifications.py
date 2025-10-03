@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+from asyncio import QueueEmpty
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from typing import Any, Iterable, Mapping, Sequence
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from aiogram import Bot
 
@@ -12,6 +15,68 @@ from i18n import t
 from utils import fmt_time, speed
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(slots=True)
+class QueuedNotification:
+    """Represent a notification that should be delivered later."""
+
+    bot: Bot
+    chat_id: int
+    text: str
+    kwargs: dict[str, Any]
+
+
+_DEFAULT_QUEUE_INTERVAL = 60.0
+
+
+def _parse_quiet_hours(value: str) -> tuple[time, time]:
+    parts = [chunk.strip() for chunk in value.split("-", 1)]
+    if len(parts) != 2:
+        raise ValueError("Expected format HH:MM-HH:MM")
+    start_raw, end_raw = parts
+    if not start_raw or not end_raw:
+        raise ValueError("Both start and end must be provided")
+    start_time = time.fromisoformat(start_raw)
+    end_time = time.fromisoformat(end_raw)
+    return start_time, end_time
+
+
+def _load_quiet_hours_from_env() -> tuple[time, time] | None:
+    value = os.getenv("QUIET_HOURS")
+    if not value:
+        return None
+    try:
+        return _parse_quiet_hours(value)
+    except ValueError:
+        logger.warning("Invalid QUIET_HOURS value provided: %s", value)
+        return None
+
+
+def _queue_interval_from_env(default: float = _DEFAULT_QUEUE_INTERVAL) -> float:
+    raw_value = os.getenv("QUIET_QUEUE_INTERVAL")
+    if not raw_value:
+        return default
+    try:
+        seconds = float(raw_value)
+    except ValueError:
+        logger.warning(
+            "Invalid QUIET_QUEUE_INTERVAL=%s provided, using default %s", raw_value, default
+        )
+        return default
+    if seconds <= 0:
+        logger.warning(
+            "Non-positive QUIET_QUEUE_INTERVAL=%s provided, using default %s",
+            seconds,
+            default,
+        )
+        return default
+    return seconds
+
+
+QUIET_HOURS_WINDOW = _load_quiet_hours_from_env()
+QUEUE_CHECK_INTERVAL = _queue_interval_from_env()
+NOTIFICATION_QUEUE: asyncio.Queue[QueuedNotification] = asyncio.Queue()
 
 WEEKDAY_NAMES: Sequence[str] = (
     "Понеділок",
@@ -22,6 +87,90 @@ WEEKDAY_NAMES: Sequence[str] = (
     "Субота",
     "Неділя",
 )
+
+
+def _time_in_window(current: time, window: tuple[time, time]) -> bool:
+    start, end = window
+    if start == end:
+        return True
+    if start < end:
+        return start <= current < end
+    return current >= start or current < end
+
+
+async def is_quiet_now(tz: str = "Europe/Kyiv") -> bool:
+    """Return True if quiet hours are configured and currently active."""
+
+    if QUIET_HOURS_WINDOW is None:
+        return False
+    try:
+        zone = ZoneInfo(tz)
+        now = datetime.now(zone).time()
+    except ZoneInfoNotFoundError:
+        logger.warning("Unknown timezone %s for quiet hours, falling back to UTC", tz)
+        now = datetime.utcnow().time()
+    return _time_in_window(now, QUIET_HOURS_WINDOW)
+
+
+async def send_notification(
+    bot: Bot,
+    chat_id: int,
+    text: str,
+    /,
+    **kwargs: Any,
+) -> None:
+    """Send notification instantly or queue it for later delivery."""
+
+    notification = QueuedNotification(
+        bot=bot,
+        chat_id=chat_id,
+        text=text,
+        kwargs=dict(kwargs),
+    )
+    if await is_quiet_now():
+        await NOTIFICATION_QUEUE.put(notification)
+        logger.info("Queued notification for chat %s due to quiet hours", chat_id)
+        return
+    await _deliver_notification(notification)
+
+
+async def _deliver_notification(notification: QueuedNotification) -> None:
+    try:
+        await notification.bot.send_message(
+            chat_id=notification.chat_id,
+            text=notification.text,
+            **notification.kwargs,
+        )
+    except Exception as exc:  # pragma: no cover - network dependent
+        logger.warning(
+            "Failed to deliver notification to %s: %s",
+            notification.chat_id,
+            exc,
+            exc_info=True,
+        )
+
+
+async def drain_queue(
+    interval: float = QUEUE_CHECK_INTERVAL,
+    *,
+    tz: str = "Europe/Kyiv",
+) -> None:
+    """Flush queued notifications when the quiet window ends."""
+
+    try:
+        while True:
+            if not await is_quiet_now(tz=tz):
+                while True:
+                    try:
+                        notification = NOTIFICATION_QUEUE.get_nowait()
+                    except QueueEmpty:
+                        break
+                    await _deliver_notification(notification)
+                    NOTIFICATION_QUEUE.task_done()
+            await asyncio.sleep(interval)
+    except asyncio.CancelledError:  # pragma: no cover - cooperative cancellation
+        logger.debug("Notification queue drain task cancelled")
+        raise
 
 
 @dataclass(frozen=True)
@@ -182,9 +331,10 @@ class NotificationService:
         )
         for chat_id in target_ids:
             try:
-                await self.bot.send_message(
-                    chat_id=chat_id,
-                    text=summary_text,
+                await send_notification(
+                    self.bot,
+                    chat_id,
+                    summary_text,
                     parse_mode="HTML",
                 )
             except Exception as exc:  # pragma: no cover - network dependent
@@ -235,15 +385,7 @@ class NotificationService:
         """Send prepared text to provided chat ids with error handling."""
 
         for chat_id in recipients:
-            try:
-                await self.bot.send_message(chat_id=chat_id, text=text)
-            except Exception as exc:  # pragma: no cover - network dependent
-                logger.warning(
-                    "Failed to deliver notification to %s: %s",
-                    chat_id,
-                    exc,
-                    exc_info=True,
-                )
+            await send_notification(self.bot, chat_id, text)
 
     def _cleanup_finished_tasks(self) -> None:
         self._tasks = {task for task in self._tasks if not task.done()}

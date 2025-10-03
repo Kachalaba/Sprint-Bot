@@ -13,6 +13,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from chat_service import ChatService
+from notifications import send_notification
 from role_service import ROLE_ADMIN, ROLE_ATHLETE, ROLE_TRAINER, RoleService
 from services import get_athlete_name, get_registered_athletes
 
@@ -459,10 +460,7 @@ async def process_text(
         )
         target_id = trainer_id
 
-    try:
-        await bot.send_message(chat_id=target_id, text=body)
-    except Exception as exc:  # pragma: no cover - network interaction
-        logger.warning("Failed to deliver chat notification to %s: %s", target_id, exc)
+    await send_notification(bot, target_id, body)
 
     await _show_dialog(
         event=message,
