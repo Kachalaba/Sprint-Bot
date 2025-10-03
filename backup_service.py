@@ -13,6 +13,8 @@ from typing import Any, Sequence
 
 from aiogram import Bot
 
+from notifications import send_notification
+
 try:  # pragma: no cover - optional dependency
     import boto3
     from botocore.client import BaseClient
@@ -263,15 +265,7 @@ class BackupService:
         if not self.admin_chat_ids:
             return
         for chat_id in self.admin_chat_ids:
-            try:
-                await self.bot.send_message(chat_id, text)
-            except Exception as exc:  # pragma: no cover - network dependent
-                logger.warning(
-                    "Failed to send backup notification to %s: %s",
-                    chat_id,
-                    exc,
-                    exc_info=True,
-                )
+            await send_notification(self.bot, chat_id, text)
 
     def _get_client(self) -> BaseClient:
         self._ensure_available()

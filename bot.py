@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from contextlib import suppress
 from datetime import timedelta
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -16,7 +17,7 @@ from i18n import t
 
 if TYPE_CHECKING:
     from backup_service import BackupService
-    from notifications import NotificationService
+    from notifications import NotificationService, drain_queue
 
 LOG_DIR = "logs"
 LOG_FILE = os.path.join(LOG_DIR, "bot.log")
@@ -229,19 +230,27 @@ async def main() -> None:
     dp = setup_dispatcher(notification_service, backup_service)
     dp.update.middleware(RoleMiddleware(role_service))
     await configure_bot_commands(bot)
-    await dp.start_polling(
-        bot,
-        notifications=notification_service,
-        chat_service=chat_service,
-        backup_service=backup_service,
-        role_service=role_service,
-        user_service=user_service,
-        template_service=template_service,
-        query_service=query_service,
-        stats_service=stats_service,
-        io_service=io_service,
-        audit_service=audit_service,
+    queue_task = asyncio.create_task(
+        drain_queue(), name="notification-queue-drain"
     )
+    try:
+        await dp.start_polling(
+            bot,
+            notifications=notification_service,
+            chat_service=chat_service,
+            backup_service=backup_service,
+            role_service=role_service,
+            user_service=user_service,
+            template_service=template_service,
+            query_service=query_service,
+            stats_service=stats_service,
+            io_service=io_service,
+            audit_service=audit_service,
+        )
+    finally:
+        queue_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await queue_task
 
 
 if __name__ == "__main__":
