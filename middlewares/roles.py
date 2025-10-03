@@ -8,6 +8,7 @@ from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject
 
 from role_service import RoleService
+from utils.roles import DEFAULT_ROLE_KEY, localize_role
 
 Handler = Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]]
 
@@ -15,7 +16,9 @@ Handler = Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]]
 class RoleMiddleware(BaseMiddleware):
     """Populate handler data with the current user's role."""
 
-    def __init__(self, role_service: RoleService, *, context_key: str = "user_role") -> None:
+    def __init__(
+        self, role_service: RoleService, *, context_key: str = DEFAULT_ROLE_KEY
+    ) -> None:
         self._role_service = role_service
         self._context_key = context_key
 
@@ -31,4 +34,5 @@ class RoleMiddleware(BaseMiddleware):
 
         role = await self._role_service.get_role(user.id)
         data[self._context_key] = role
+        data[f"{self._context_key}_label"] = localize_role(role)
         return await handler(event, data)
