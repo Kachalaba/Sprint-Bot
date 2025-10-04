@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
+from statistics import fmean
 from typing import Iterable, Sequence
 
 
@@ -65,6 +67,26 @@ class WeeklyProgress:
     attempts: int
     pr_count: int
     highlights: tuple[ProgressResult, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class TurnProgressResult:
+    """Describe efficiency trend for a specific turn number."""
+
+    turn_number: int
+    efficiency_trend: float
+    improvement_rate: float
+
+
+@dataclass(frozen=True, slots=True)
+class TurnComparison:
+    """Compare average turn efficiency between two periods."""
+
+    turn_number: int
+    previous_avg: float | None
+    current_avg: float | None
+    delta: float | None
+    percent_change: float | None
 
 
 class StatsPeriod(str, Enum):
@@ -145,6 +167,52 @@ class StatsService:
             highlights=tuple(highlights),
         )
 
+    async def get_turn_analytics(self, athlete_id: int, stroke: str) -> dict:
+        """Return chronological turn efficiency data for the athlete and stroke."""
+
+        rows = await asyncio.to_thread(
+            self._fetch_turn_rows,
+            athlete_id,
+            stroke,
+        )
+        progress = self._calculate_turn_progress(rows)
+        return {
+            "rows": tuple(rows),
+            "progress": tuple(progress),
+        }
+
+    async def compare_turn_efficiency(
+        self, athlete_id: int, period: StatsPeriod
+    ) -> dict:
+        """Compare average turn efficiency between consecutive periods."""
+
+        now = datetime.now(timezone.utc)
+        current_since = self._period_start(period, now=now)
+        previous_since = self._period_start(period, now=current_since)
+        current_task = asyncio.create_task(
+            asyncio.to_thread(
+                self._aggregate_turn_average,
+                athlete_id,
+                current_since,
+                now,
+            )
+        )
+        previous_task = asyncio.create_task(
+            asyncio.to_thread(
+                self._aggregate_turn_average,
+                athlete_id,
+                previous_since,
+                current_since,
+            )
+        )
+        current_map, previous_map = await asyncio.gather(current_task, previous_task)
+        comparisons = self._build_turn_comparisons(previous_map, current_map)
+        return {
+            "current": current_map,
+            "previous": previous_map,
+            "comparisons": tuple(comparisons),
+        }
+
     # --- calculation helpers -------------------------------------------------
 
     def _connect(self) -> sqlite3.Connection:
@@ -193,6 +261,48 @@ class StatsService:
                 pr_count=int(row["pr_count"] or 0),
                 attempts=int(row["attempts"] or 0),
             )
+
+    def _fetch_turn_rows(self, athlete_id: int, stroke: str) -> list[dict]:
+        query = """
+            SELECT
+                r.id AS result_id,
+                r.timestamp AS timestamp,
+                r.distance AS distance,
+                r.athlete_name AS athlete_name,
+                r.stroke AS stroke,
+                ta.turn_number AS turn_number,
+                ta.approach_time AS approach_time,
+                ta.wall_contact_time AS wall_contact_time,
+                ta.push_off_time AS push_off_time,
+                ta.underwater_time AS underwater_time,
+                ta.total_turn_time AS total_turn_time
+            FROM results AS r
+            INNER JOIN turn_analysis AS ta ON ta.result_id = r.id
+            WHERE r.athlete_id = ? AND LOWER(r.stroke) = LOWER(?)
+            ORDER BY r.timestamp ASC, ta.turn_number ASC
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(query, (athlete_id, stroke))
+            rows = cursor.fetchall()
+        results: list[dict] = []
+        for row in rows:
+            timestamp = self._parse_timestamp(row["timestamp"])
+            results.append(
+                {
+                    "result_id": int(row["result_id"]),
+                    "timestamp": timestamp,
+                    "distance": int(row["distance"]),
+                    "stroke": str(row["stroke"]),
+                    "athlete_name": str(row["athlete_name"] or "").strip(),
+                    "turn_number": int(row["turn_number"]),
+                    "approach_time": self._safe_float(row["approach_time"]),
+                    "wall_contact_time": self._safe_float(row["wall_contact_time"]),
+                    "push_off_time": self._safe_float(row["push_off_time"]),
+                    "underwater_time": self._safe_float(row["underwater_time"]),
+                    "total_turn_time": self._safe_float(row["total_turn_time"]),
+                }
+            )
+        return results
 
     def _count_attempts(self, athlete_id: int, since: datetime) -> int:
         query = """
@@ -244,6 +354,104 @@ class StatsService:
                 )
             )
         return results
+
+    def _aggregate_turn_average(
+        self, athlete_id: int, start: datetime, end: datetime
+    ) -> dict[int, float]:
+        query = """
+            SELECT ta.turn_number AS turn_number, AVG(ta.total_turn_time) AS avg_time
+            FROM results AS r
+            INNER JOIN turn_analysis AS ta ON ta.result_id = r.id
+            WHERE r.athlete_id = ?
+              AND r.timestamp >= ?
+              AND r.timestamp < ?
+              AND ta.total_turn_time IS NOT NULL
+            GROUP BY ta.turn_number
+        """
+        args = (athlete_id, start.isoformat(), end.isoformat())
+        with self._connect() as conn:
+            cursor = conn.execute(query, args)
+            rows = cursor.fetchall()
+        return {int(row["turn_number"]): float(row["avg_time"]) for row in rows}
+
+    def _build_turn_comparisons(
+        self, previous: dict[int, float], current: dict[int, float]
+    ) -> Iterable[TurnComparison]:
+        turn_numbers = sorted(set(previous) | set(current))
+        for turn_number in turn_numbers:
+            prev = previous.get(turn_number)
+            curr = current.get(turn_number)
+            if prev is None and curr is None:
+                continue
+            if prev is not None and curr is not None:
+                delta = prev - curr
+                percent = (delta / prev * 100.0) if prev else None
+            else:
+                delta = None
+                percent = None
+            yield TurnComparison(
+                turn_number=turn_number,
+                previous_avg=prev,
+                current_avg=curr,
+                delta=delta,
+                percent_change=percent,
+            )
+
+    def _calculate_turn_progress(
+        self, rows: Sequence[dict]
+    ) -> Iterable[TurnProgressResult]:
+        grouped: dict[int, list[float]] = defaultdict(list)
+        for row in rows:
+            value = row.get("total_turn_time")
+            if value is None:
+                continue
+            grouped[int(row["turn_number"])].append(float(value))
+        for turn_number, values in sorted(grouped.items()):
+            if len(values) < 2:
+                yield TurnProgressResult(
+                    turn_number=turn_number,
+                    efficiency_trend=0.0,
+                    improvement_rate=0.0,
+                )
+                continue
+            slope = self._calculate_trend(values)
+            first = values[0]
+            last = values[-1]
+            improvement = 0.0
+            if first > 0:
+                improvement = (first - last) / first * 100.0
+            yield TurnProgressResult(
+                turn_number=turn_number,
+                efficiency_trend=slope,
+                improvement_rate=improvement,
+            )
+
+    @staticmethod
+    def _calculate_trend(values: Sequence[float]) -> float:
+        count = len(values)
+        if count < 2:
+            return 0.0
+        x_mean = (count - 1) / 2
+        y_mean = fmean(values)
+        numerator = 0.0
+        denominator = 0.0
+        for idx, value in enumerate(values):
+            x_delta = idx - x_mean
+            y_delta = value - y_mean
+            numerator += x_delta * y_delta
+            denominator += x_delta * x_delta
+        if denominator == 0:
+            return 0.0
+        return numerator / denominator
+
+    @staticmethod
+    def _safe_float(value: float | int | str | None) -> float | None:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
 
     @staticmethod
     def _parse_timestamp(raw: str | bytes | None) -> datetime:
@@ -323,6 +531,8 @@ __all__ = [
     "StatsPeriod",
     "StatsService",
     "TotalPRResult",
+    "TurnComparison",
+    "TurnProgressResult",
     "WeeklyProgress",
     "calc_segment_prs",
     "calc_sob",
