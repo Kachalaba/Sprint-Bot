@@ -37,6 +37,12 @@ from keyboards import (
     pack_timestamp_for_callback,
     unpack_timestamp_from_callback,
 )
+from menu_callbacks import (
+    CB_MENU_ADD_RESULT,
+    CB_MENU_HISTORY,
+    CB_MENU_RECORDS,
+    CB_MENU_STAYER,
+)
 from notifications import NotificationService
 from role_service import ROLE_ATHLETE, RoleService
 from services import ws_athletes, ws_log, ws_pr, ws_results
@@ -956,7 +962,7 @@ async def records(cb: types.CallbackQuery) -> None:
     await cb.message.answer("\n\n".join(lines))
 
 
-@router.callback_query(F.data == "menu_sprint")
+@router.callback_query(F.data == CB_MENU_ADD_RESULT)
 async def menu_sprint(
     cb: types.CallbackQuery, state: FSMContext, role_service: RoleService
 ) -> None:
@@ -1036,21 +1042,21 @@ async def select_athlete(
     await state.set_state(AddResult.choose_dist)
 
 
-@router.callback_query(F.data == "menu_history")
+@router.callback_query(F.data == CB_MENU_HISTORY)
 async def menu_history(cb: types.CallbackQuery) -> None:
     """Menu alias for history."""
 
     await history(cb)
 
 
-@router.callback_query(F.data == "menu_records")
+@router.callback_query(F.data == CB_MENU_RECORDS)
 async def menu_records(cb: types.CallbackQuery) -> None:
     """Menu alias for records."""
 
     await records(cb)
 
 
-@router.callback_query(F.data == "menu_stayer")
+@router.callback_query(F.data == CB_MENU_STAYER)
 async def menu_stayer(cb: types.CallbackQuery) -> None:
     """Notify that stayer block is under construction."""
 

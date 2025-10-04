@@ -10,6 +10,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from menu_callbacks import CB_MENU_ADMIN
 from role_service import ROLE_ADMIN, ROLE_ATHLETE, ROLE_TRAINER, RoleService
 from utils.roles import require_roles
 
@@ -58,7 +59,7 @@ async def _answer(
 
 
 @router.message(Command("admin"), require_roles(ROLE_ADMIN))
-@router.callback_query(require_roles(ROLE_ADMIN), F.data == "menu_admin")
+@router.callback_query(require_roles(ROLE_ADMIN), F.data == CB_MENU_ADMIN)
 async def open_admin_panel(
     event: types.Message | types.CallbackQuery, state: FSMContext
 ) -> None:

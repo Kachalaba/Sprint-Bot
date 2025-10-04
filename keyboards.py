@@ -13,6 +13,15 @@ from aiogram.types import (
 )
 
 from i18n import t
+from menu_callbacks import (
+    CB_MENU_ADD_RESULT,
+    CB_MENU_ADMIN,
+    CB_MENU_HISTORY,
+    CB_MENU_INVITE,
+    CB_MENU_MESSAGES,
+    CB_MENU_RECORDS,
+    CB_MENU_STAYER,
+)
 from role_service import ROLE_ADMIN, ROLE_ATHLETE, ROLE_TRAINER
 
 if TYPE_CHECKING:  # pragma: no cover - typing helpers only
@@ -39,13 +48,6 @@ KB_LANGUAGE_RU = "kb.language.ru"
 KB_SKIP = "kb.skip"
 KB_COMMENT_EDIT = "kb.comment.edit"
 KB_COMMENT_ADD = "kb.comment.add"
-KB_MENU_SPRINT = "kb.menu.sprint"
-KB_MENU_STAYER = "kb.menu.stayer"
-KB_MENU_HISTORY = "kb.menu.history"
-KB_MENU_RECORDS = "kb.menu.records"
-KB_MENU_MESSAGES = "kb.menu.messages"
-KB_MENU_INVITE = "kb.menu.invite"
-KB_MENU_ADMIN = "kb.menu.admin"
 
 COMMON_BACK = "common.back"
 COMMON_CANCEL = "common.cancel"
@@ -401,21 +403,33 @@ def get_main_keyboard(role: str) -> InlineKeyboardMarkup:
     """Return main menu keyboard respecting user role."""
 
     buttons = [
-        [InlineKeyboardButton(text=t(KB_MENU_SPRINT), callback_data="menu_sprint")],
-        [InlineKeyboardButton(text=t(KB_MENU_STAYER), callback_data="menu_stayer")],
-        [InlineKeyboardButton(text=t(KB_MENU_HISTORY), callback_data="menu_history")],
-        [InlineKeyboardButton(text=t(KB_MENU_RECORDS), callback_data="menu_records")],
-        [InlineKeyboardButton(text=t(KB_MENU_MESSAGES), callback_data="menu_messages")],
+        [
+            InlineKeyboardButton(
+                text=t("menu.add_result"), callback_data=CB_MENU_ADD_RESULT
+            )
+        ],
+        [InlineKeyboardButton(text=t("menu.stayer"), callback_data=CB_MENU_STAYER)],
+        [
+            InlineKeyboardButton(
+                text=t("menu.search_history"), callback_data=CB_MENU_HISTORY
+            )
+        ],
+        [InlineKeyboardButton(text=t("menu.records"), callback_data=CB_MENU_RECORDS)],
+        [InlineKeyboardButton(text=t("menu.messages"), callback_data=CB_MENU_MESSAGES)],
     ]
 
     if role in {ROLE_TRAINER, ROLE_ADMIN}:
         buttons.append(
-            [InlineKeyboardButton(text=t(KB_MENU_INVITE), callback_data="invite")]
+            [InlineKeyboardButton(text=t("menu.invite"), callback_data=CB_MENU_INVITE)]
         )
 
     if role == ROLE_ADMIN:
         buttons.append(
-            [InlineKeyboardButton(text=t(KB_MENU_ADMIN), callback_data="menu_admin")]
+            [
+                InlineKeyboardButton(
+                    text=t("menu.admin_section"), callback_data=CB_MENU_ADMIN
+                )
+            ]
         )
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)

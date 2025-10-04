@@ -12,6 +12,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from i18n import t
+from menu_callbacks import CB_MENU_TEMPLATES
 from role_service import ROLE_ADMIN, ROLE_TRAINER, RoleService
 from template_service import SprintTemplate, TemplateService
 from utils import TemplateStates
@@ -247,7 +248,7 @@ async def templates_menu(
     await _show_list(message, template_service)
 
 
-@router.callback_query(F.data == "menu_templates")
+@router.callback_query(F.data == CB_MENU_TEMPLATES)
 async def menu_templates(
     cb: types.CallbackQuery,
     state: FSMContext,

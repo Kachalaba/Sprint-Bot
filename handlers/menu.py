@@ -3,10 +3,18 @@
 from __future__ import annotations
 
 from aiogram import F, Router, types
-from aiogram.filters import Command
+from aiogram.filters import Command, CommandStart
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from i18n import t
+from menu_callbacks import (
+    CB_MENU_ADD_RESULT,
+    CB_MENU_ADMIN,
+    CB_MENU_HISTORY,
+    CB_MENU_PROGRESS,
+    CB_MENU_REPORTS,
+    CB_MENU_TEMPLATES,
+)
 from role_service import ROLE_ADMIN, ROLE_ATHLETE, ROLE_TRAINER, RoleService
 from utils.roles import require_roles
 
@@ -24,22 +32,22 @@ def _menu_keyboard_for_manager() -> InlineKeyboardMarkup:
         inline_keyboard=[
             _row(
                 InlineKeyboardButton(
-                    text=t("menu.add_result"), callback_data="menu_sprint"
+                    text=t("menu.add_result"), callback_data=CB_MENU_ADD_RESULT
                 )
             ),
             _row(
                 InlineKeyboardButton(
-                    text=t("menu.templates"), callback_data="menu_templates"
+                    text=t("menu.templates"), callback_data=CB_MENU_TEMPLATES
                 )
             ),
             _row(
                 InlineKeyboardButton(
-                    text=t("menu.reports"), callback_data="menu_reports"
+                    text=t("menu.reports"), callback_data=CB_MENU_REPORTS
                 )
             ),
             _row(
                 InlineKeyboardButton(
-                    text=t("menu.search_history"), callback_data="menu_history"
+                    text=t("menu.search_history"), callback_data=CB_MENU_HISTORY
                 )
             ),
         ]
@@ -51,12 +59,12 @@ def _menu_keyboard_for_athlete() -> InlineKeyboardMarkup:
         inline_keyboard=[
             _row(
                 InlineKeyboardButton(
-                    text=t("menu.my_results"), callback_data="menu_history"
+                    text=t("menu.my_results"), callback_data=CB_MENU_HISTORY
                 )
             ),
             _row(
                 InlineKeyboardButton(
-                    text=t("menu.my_progress"), callback_data="menu_progress"
+                    text=t("menu.my_progress"), callback_data=CB_MENU_PROGRESS
                 )
             ),
         ]
@@ -73,14 +81,16 @@ def build_menu_keyboard(role: str) -> InlineKeyboardMarkup:
         keyboard.inline_keyboard.append(
             _row(
                 InlineKeyboardButton(
-                    text=t("menu.admin_section"), callback_data="menu_admin"
+                    text=t("menu.admin_section"), callback_data=CB_MENU_ADMIN
                 )
             )
         )
     return keyboard
 
 
-async def _resolve_role(message: types.Message, role_service: RoleService, user_role: str | None) -> str:
+async def _resolve_role(
+    message: types.Message, role_service: RoleService, user_role: str | None
+) -> str:
     await role_service.upsert_user(message.from_user)
     if user_role:
         return user_role
@@ -103,8 +113,8 @@ async def cmd_menu(
     await _send_menu(message, role_service, user_role)
 
 
-@router.message(F.text == "Старт")
-async def start_button(
+@router.message(CommandStart())
+async def cmd_start(
     message: types.Message, role_service: RoleService, user_role: str | None = None
 ) -> None:
     """Handle reply keyboard start button."""
@@ -112,7 +122,9 @@ async def start_button(
     await _send_menu(message, role_service, user_role)
 
 
-@router.callback_query(require_roles(ROLE_TRAINER, ROLE_ADMIN), F.data == "menu_reports")
+@router.callback_query(
+    require_roles(ROLE_TRAINER, ROLE_ADMIN), F.data == CB_MENU_REPORTS
+)
 async def menu_reports(cb: types.CallbackQuery) -> None:
     """Placeholder for coach/admin report section."""
 
@@ -120,7 +132,7 @@ async def menu_reports(cb: types.CallbackQuery) -> None:
     await cb.answer()
 
 
-@router.callback_query(F.data == "menu_progress")
+@router.callback_query(F.data == CB_MENU_PROGRESS)
 async def menu_progress_redirect(
     cb: types.CallbackQuery, role_service: RoleService
 ) -> None:

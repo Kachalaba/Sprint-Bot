@@ -10,6 +10,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 from handlers.menu import build_menu_keyboard
+from menu_callbacks import CB_MENU_INVITE
 from role_service import ROLE_ATHLETE, ROLE_TRAINER, RoleService
 from services import bot, ws_athletes
 from utils.roles import require_roles
@@ -28,7 +29,7 @@ class RegStates(StatesGroup):
     waiting_for_name = State()
 
 
-@router.callback_query(require_roles(ROLE_TRAINER), F.data == "invite")
+@router.callback_query(require_roles(ROLE_TRAINER), F.data == CB_MENU_INVITE)
 async def send_invite(cb: types.CallbackQuery, role_service: RoleService) -> None:
     """Generate one-time invite link for a coach."""
 

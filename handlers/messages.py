@@ -13,6 +13,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from chat_service import ChatService
+from menu_callbacks import CB_MENU_MESSAGES
 from notifications import send_notification
 from role_service import ROLE_ADMIN, ROLE_ATHLETE, ROLE_TRAINER, RoleService
 from services import get_athlete_name, get_registered_athletes
@@ -95,7 +96,7 @@ async def cmd_messages(
     )
 
 
-@router.callback_query(F.data == "menu_messages")
+@router.callback_query(F.data == CB_MENU_MESSAGES)
 async def menu_messages(
     cb: types.CallbackQuery,
     state: FSMContext,
@@ -155,6 +156,7 @@ async def _show_threads(
             if athlete_id in accessible_ids
         ]
     else:
+
         def title_fn(value: str) -> str:
             return f"Тренер {value}"
 
