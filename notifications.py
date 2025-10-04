@@ -80,14 +80,14 @@ QUIET_HOURS_WINDOW = _load_quiet_hours_from_env()
 QUEUE_CHECK_INTERVAL = _queue_interval_from_env()
 NOTIFICATION_QUEUE: asyncio.Queue[QueuedNotification] = asyncio.Queue()
 
-WEEKDAY_NAMES: Sequence[str] = (
-    "Понеділок",
-    "Вівторок",
-    "Середа",
-    "Четвер",
-    "Пʼятниця",
-    "Субота",
-    "Неділя",
+WEEKDAY_TRANSLATION_KEYS: Sequence[str] = (
+    "week.mon",
+    "week.tue",
+    "week.wed",
+    "week.thu",
+    "week.fri",
+    "week.sat",
+    "week.sun",
 )
 
 
@@ -201,10 +201,7 @@ class SprintReminderPlan:
 
     weekdays: tuple[int, ...]
     time_of_day: time
-    message_template: str = (
-        "⏱ <b>Нагадування про спринт</b>\n"
-        "Новий сет стартує {start_label}. Підготуйтеся до тренування та оновіть результати!"
-    )
+    message_template: str = "note.sprint_reminder"
 
 
 class NotificationService:
@@ -377,24 +374,33 @@ class NotificationService:
             return
         await self._broadcast(text, recipients)
 
-    def describe_schedule(self) -> str:
+    def describe_schedule(self, *, lang: str | None = None) -> str:
         """Return human readable description of the sprint reminder plan."""
 
         weekdays = ", ".join(
-            self.weekday_name(day) for day in sorted(self.sprint_plan.weekdays)
+            self.weekday_name(day, lang=lang)
+            for day in sorted(self.sprint_plan.weekdays)
         )
         time_label = self.sprint_plan.time_of_day.strftime("%H:%M")
-        return f"Нагадування надходять о {time_label} у дні: {weekdays}."
+        return t(
+            "note.schedule_description",
+            lang=lang,
+            time=time_label,
+            weekdays=weekdays,
+        )
 
     def next_sprint_run(self, *, now: datetime | None = None) -> datetime:
         """Return next datetime when the sprint reminder will be sent."""
 
         return self._next_sprint_run(now or datetime.now())
 
-    def weekday_name(self, weekday: int) -> str:
+    def weekday_name(self, weekday: int, *, lang: str | None = None) -> str:
         """Return localized weekday name for given index."""
 
-        return WEEKDAY_NAMES[weekday % 7]
+        translation_key = WEEKDAY_TRANSLATION_KEYS[
+            weekday % len(WEEKDAY_TRANSLATION_KEYS)
+        ]
+        return t(translation_key, lang=lang)
 
     async def _get_subscribers(
         self, *, exclude: Iterable[int] | None = None
@@ -430,8 +436,9 @@ class NotificationService:
                     continue
 
                 start_label = self._format_start_label(next_run)
-                message = self.sprint_plan.message_template.format(
-                    start_label=start_label
+                message = t(
+                    self.sprint_plan.message_template,
+                    start_label=start_label,
                 )
                 await self._broadcast(message, recipients)
         except asyncio.CancelledError:  # pragma: no cover - cooperative cancellation
@@ -453,9 +460,15 @@ class NotificationService:
         candidate_date = (start + timedelta(days=days_ahead)).date()
         return datetime.combine(candidate_date, plan.time_of_day)
 
-    def _format_start_label(self, start: datetime) -> str:
-        weekday = self.weekday_name(start.weekday())
-        return f"{weekday}, {start:%d.%m о %H:%M}"
+    def _format_start_label(self, start: datetime, *, lang: str | None = None) -> str:
+        weekday = self.weekday_name(start.weekday(), lang=lang)
+        return t(
+            "note.sprint_start_label",
+            lang=lang,
+            weekday=weekday,
+            date=start.strftime("%d.%m"),
+            time=start.strftime("%H:%M"),
+        )
 
     def quiet_hours_notice(self, *, lang: str | None = None) -> str:
         """Return localized notice about quiet hours."""
