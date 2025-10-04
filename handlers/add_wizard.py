@@ -28,13 +28,26 @@ class AddWizardStates(StatesGroup):
     confirm = State()
 
 
-STYLE_CHOICES: tuple[tuple[str, str], ...] = (
-    ("freestyle", "🏊‍♂️ Кроль"),
-    ("backstroke", "🏊‍♀️ Спина"),
-    ("butterfly", "🦋 Батерфляй"),
-    ("breaststroke", "🐸 Брас"),
-    ("medley", "🔁 Комплекс"),
+@dataclass(frozen=True, slots=True)
+class StrokeOption:
+    """Configuration for stroke selection options."""
+
+    code: str
+    callback_id: str
+
+
+STROKE_OPTIONS: tuple[StrokeOption, ...] = (
+    StrokeOption(code="freestyle", callback_id="STROKE_FREESTYLE"),
+    StrokeOption(code="backstroke", callback_id="STROKE_BACKSTROKE"),
+    StrokeOption(code="butterfly", callback_id="STROKE_BUTTERFLY"),
+    StrokeOption(code="breaststroke", callback_id="STROKE_BREASTSTROKE"),
+    StrokeOption(code="medley", callback_id="STROKE_MEDLEY"),
 )
+
+STROKE_ID_TO_CODE: dict[str, str] = {
+    option.callback_id: option.code for option in STROKE_OPTIONS
+}
+STROKE_CODES: set[str] = {option.code for option in STROKE_OPTIONS}
 
 DISTANCE_CHOICES: tuple[int, ...] = (50, 100, 200, 400, 800)
 
@@ -79,11 +92,13 @@ def _generate_segment_templates(distance: int) -> tuple[SegmentTemplate, ...]:
 def _style_keyboard() -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     row: list[InlineKeyboardButton] = []
-    for value, label in STYLE_CHOICES:
+    for option in STROKE_OPTIONS:
         row.append(
             InlineKeyboardButton(
-                text=label,
-                callback_data=AddWizardCB(action="style", value=value).pack(),
+                text=t(f"stroke.{option.code}"),
+                callback_data=AddWizardCB(
+                    action="style", value=option.callback_id
+                ).pack(),
             )
         )
         if len(row) == 2:
@@ -180,10 +195,10 @@ def _confirm_keyboard() -> InlineKeyboardMarkup:
 
 
 def _format_summary(data: dict) -> str:
-    style_label = next(
-        (label for value, label in STYLE_CHOICES if value == data.get("style")),
-        data.get("style", ""),
-    )
+    style_code = data.get("style")
+    style_label = t(f"stroke.{style_code}") if style_code else ""
+    if not style_label and style_code:
+        style_label = style_code
     distance = data.get("distance")
     segments = data.get("segments", [])
     splits = data.get("splits", [])
@@ -272,7 +287,11 @@ async def cancel_wizard(callback: types.CallbackQuery, state: FSMContext) -> Non
 async def choose_style(
     callback: types.CallbackQuery, state: FSMContext, callback_data: AddWizardCB
 ) -> None:
-    await state.update_data(style=callback_data.value)
+    style_code = STROKE_ID_TO_CODE.get(callback_data.value, callback_data.value)
+    if style_code not in STROKE_CODES:
+        await callback.answer()
+        return
+    await state.update_data(style=style_code)
     await state.set_state(AddWizardStates.choose_distance)
     await callback.answer()
     await _show_distance_step(callback.message)
