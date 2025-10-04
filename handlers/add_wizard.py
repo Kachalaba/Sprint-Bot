@@ -24,6 +24,7 @@ class AddWizardStates(StatesGroup):
     choose_distance = State()
     choose_template = State()
     enter_splits = State()
+    enter_turn_details = State()
     enter_total = State()
     confirm = State()
 
@@ -51,6 +52,59 @@ STROKE_CODES: set[str] = {option.code for option in STROKE_OPTIONS}
 
 DISTANCE_CHOICES: tuple[int, ...] = (50, 100, 200, 400, 800)
 
+_TYPE_ENCODINGS: dict[str, str] = {"swim": "s", "turn": "t"}
+_TYPE_DECODINGS: dict[str, str] = {value: key for key, value in _TYPE_ENCODINGS.items()}
+
+
+def _count_turn_segments(segment_types: Sequence[str]) -> int:
+    """Return number of turn segments in provided type list."""
+
+    return sum(1 for seg_type in segment_types if seg_type == "turn")
+
+
+def _count_swim_segments(segment_types: Sequence[str], fallback: int) -> int:
+    """Return number of swim segments, falling back if types missing."""
+
+    if not segment_types:
+        return fallback
+    return len(segment_types) - _count_turn_segments(segment_types)
+
+
+def _combine_times_by_type(
+    segment_types: Sequence[str],
+    swim_times: Sequence[float],
+    turn_times: Sequence[float],
+) -> list[float]:
+    """Return combined sequence of swim and turn times in template order."""
+
+    if not segment_types:
+        return list(swim_times)
+    combined: list[float] = []
+    swim_iter = iter(swim_times)
+    turn_iter = iter(turn_times)
+    for seg_type in segment_types:
+        if seg_type == "turn":
+            try:
+                combined.append(next(turn_iter))
+            except StopIteration:  # pragma: no cover - defensive fallback
+                combined.append(0.0)
+        else:
+            try:
+                combined.append(next(swim_iter))
+            except StopIteration:  # pragma: no cover - defensive fallback
+                combined.append(0.0)
+    combined.extend(list(swim_iter))
+    combined.extend(list(turn_iter))
+    return combined
+
+
+def _needs_turn_step(stroke: str | None, segment_types: Sequence[str]) -> bool:
+    """Return True if turn data entry is required for selected stroke."""
+
+    if stroke not in {"breaststroke", "butterfly"}:
+        return False
+    return any(seg_type == "turn" for seg_type in segment_types)
+
 
 @dataclass(frozen=True, slots=True)
 class SegmentTemplate:
@@ -58,13 +112,22 @@ class SegmentTemplate:
 
     label: str
     segments: tuple[float, ...]
+    segment_types: tuple[str, ...]
 
 
-def _generate_segment_templates(distance: int) -> tuple[SegmentTemplate, ...]:
+def _generate_segment_templates(
+    distance: int, stroke: str | None = None
+) -> tuple[SegmentTemplate, ...]:
     """Return default segment templates for provided distance."""
 
     if distance <= 0:
-        return (SegmentTemplate(label=f"{distance} м", segments=(float(distance),)),)
+        return (
+            SegmentTemplate(
+                label=f"{distance} м",
+                segments=(float(distance),),
+                segment_types=("swim",),
+            ),
+        )
 
     candidates: set[tuple[float, ...]] = set()
     base_lengths: tuple[int, ...] = (1, 2, 4, 8)
@@ -84,7 +147,33 @@ def _generate_segment_templates(distance: int) -> tuple[SegmentTemplate, ...]:
             SegmentTemplate(
                 label=f"{parts}×{segments[0]:g} м" if parts > 1 else f"{distance} м",
                 segments=segments,
+                segment_types=tuple("swim" for _ in segments),
             )
+        )
+
+    if stroke in {"breaststroke", "butterfly"} and distance % 25 == 0 and distance > 25:
+        lengths = distance // 25
+        turn_segments: list[float] = []
+        turn_types: list[str] = []
+        for index in range(lengths):
+            turn_segments.append(25.0)
+            turn_types.append("swim")
+            if index != lengths - 1:
+                turn_segments.append(0.0)
+                turn_types.append("turn")
+        label_parts: list[str] = []
+        for value, seg_type in zip(turn_segments, turn_types):
+            if seg_type == "turn":
+                label_parts.append("поворот")
+            else:
+                label_parts.append(f"{value:g} м")
+        templates.insert(
+            0,
+            SegmentTemplate(
+                label=" + ".join(label_parts),
+                segments=tuple(turn_segments),
+                segment_types=tuple(turn_types),
+            ),
         )
     return tuple(templates)
 
@@ -129,8 +218,44 @@ def _distance_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def _template_keyboard(distance: int) -> InlineKeyboardMarkup:
-    templates = _generate_segment_templates(distance)
+def _encode_template_payload(template: SegmentTemplate) -> str:
+    """Return compact payload for template selection callback."""
+
+    parts: list[str] = []
+    for value, seg_type in zip(template.segments, template.segment_types):
+        suffix = _TYPE_ENCODINGS.get(seg_type, "s")
+        parts.append(f"{value:g}{suffix}")
+    return "|".join(parts)
+
+
+def _decode_template_payload(payload: str) -> tuple[tuple[float, ...], tuple[str, ...]]:
+    """Decode template selection payload back to segments and types."""
+
+    segments: list[float] = []
+    segment_types: list[str] = []
+    if not payload:
+        return tuple(segments), tuple(segment_types)
+    for chunk in payload.split("|"):
+        if not chunk:
+            continue
+        type_code = chunk[-1]
+        value_part = chunk[:-1]
+        if type_code not in _TYPE_DECODINGS or not value_part:
+            value_part = chunk
+            seg_type = "swim"
+        else:
+            seg_type = _TYPE_DECODINGS[type_code]
+        try:
+            value = float(value_part)
+        except ValueError:
+            continue
+        segments.append(value)
+        segment_types.append(seg_type)
+    return tuple(segments), tuple(segment_types)
+
+
+def _template_keyboard(distance: int, stroke: str | None) -> InlineKeyboardMarkup:
+    templates = _generate_segment_templates(distance, stroke)
     rows: list[list[InlineKeyboardButton]] = []
     row: list[InlineKeyboardButton] = []
     for template in templates:
@@ -139,7 +264,7 @@ def _template_keyboard(distance: int) -> InlineKeyboardMarkup:
                 text=template.label,
                 callback_data=AddWizardCB(
                     action="template",
-                    value="|".join(str(value) for value in template.segments),
+                    value=_encode_template_payload(template),
                 ).pack(),
             )
         )
@@ -166,7 +291,15 @@ def _splits_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def _total_keyboard() -> InlineKeyboardMarkup:
+def _turn_details_keyboard() -> InlineKeyboardMarkup:
+    """Return navigation keyboard for turn detail input."""
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[wizard_navigation_row(back_target="splits")]
+    )
+
+
+def _total_keyboard(back_target: str = "splits") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -175,7 +308,7 @@ def _total_keyboard() -> InlineKeyboardMarkup:
                     callback_data=AddWizardCB(action="even").pack(),
                 )
             ],
-            wizard_navigation_row(back_target="splits"),
+            wizard_navigation_row(back_target=back_target),
         ]
     )
 
@@ -194,6 +327,35 @@ def _confirm_keyboard() -> InlineKeyboardMarkup:
     )
 
 
+def _format_segments_line(
+    segments: Sequence[float], segment_types: Sequence[str]
+) -> str:
+    """Return human readable segment label including turns."""
+
+    if not segments:
+        return ""
+    if len(segments) != len(segment_types) or not segment_types:
+        return " + ".join(f"{value:g} м" for value in segments)
+    parts: list[str] = []
+    for value, seg_type in zip(segments, segment_types):
+        if seg_type == "turn":
+            parts.append("поворот")
+        else:
+            parts.append(f"{value:g} м")
+    return " + ".join(parts)
+
+
+def _format_turn_summary(turn_times: Sequence[float]) -> str:
+    """Return formatted list of turn times for summary output."""
+
+    if not turn_times:
+        return "—"
+    formatted: list[str] = []
+    for index, value in enumerate(turn_times, start=1):
+        formatted.append(f"#{index}: {fmt_time(value)}")
+    return ", ".join(formatted)
+
+
 def _format_summary(data: dict) -> str:
     style_code = data.get("style")
     style_label = t(f"stroke.{style_code}") if style_code else ""
@@ -201,19 +363,24 @@ def _format_summary(data: dict) -> str:
         style_label = style_code
     distance = data.get("distance")
     segments = data.get("segments", [])
+    segment_types = data.get("segment_types", [])
     splits = data.get("splits", [])
+    turn_times = data.get("turn_times", [])
     total = data.get("total")
-    segments_line = " + ".join(f"{value:g} м" for value in segments)
+    segments_line = _format_segments_line(segments, segment_types)
     splits_line = ", ".join(fmt_time(value) for value in splits)
+    turn_summary = _format_turn_summary(turn_times)
     total_line = fmt_time(total) if total is not None else "—"
-    return t(
+    summary = t(
         "add.summary",
         style=style_label,
         distance=f"{distance} м" if distance is not None else "—",
         segments=segments_line or "—",
         splits=splits_line or "—",
         total=total_line,
+        turns=turn_summary,
     )
+    return summary
 
 
 async def _show_style_step(message: types.Message) -> None:
@@ -230,10 +397,12 @@ async def _show_distance_step(message: types.Message) -> None:
     )
 
 
-async def _show_template_step(message: types.Message, distance: int) -> None:
+async def _show_template_step(
+    message: types.Message, distance: int, stroke: str | None
+) -> None:
     await message.answer(
         t("add.step.template", distance=distance),
-        reply_markup=_template_keyboard(distance),
+        reply_markup=_template_keyboard(distance, stroke),
     )
 
 
@@ -244,10 +413,17 @@ async def _show_splits_step(message: types.Message, _segments: Iterable[float]) 
     )
 
 
-async def _show_total_step(message: types.Message) -> None:
+async def _show_turn_details_step(message: types.Message, turn_count: int) -> None:
+    await message.answer(
+        t("add.step.turns", count=turn_count),
+        reply_markup=_turn_details_keyboard(),
+    )
+
+
+async def _show_total_step(message: types.Message, back_target: str) -> None:
     await message.answer(
         t("add.step.total"),
-        reply_markup=_total_keyboard(),
+        reply_markup=_total_keyboard(back_target),
     )
 
 
@@ -306,9 +482,13 @@ async def choose_distance(
     await callback.answer()
     distance = int(callback_data.value)
     await state.update_data(distance=distance)
-    await _clear_after(state, ("segments", "splits", "total"))
+    await _clear_after(
+        state,
+        ("segments", "segment_types", "splits", "turn_times", "total"),
+    )
     await state.set_state(AddWizardStates.choose_template)
-    await _show_template_step(callback.message, distance)
+    data = await state.get_data()
+    await _show_template_step(callback.message, distance, data.get("style"))
 
 
 @router.callback_query(
@@ -318,9 +498,11 @@ async def choose_template(
     callback: types.CallbackQuery, state: FSMContext, callback_data: AddWizardCB
 ) -> None:
     await callback.answer()
-    segments = tuple(float(value) for value in callback_data.value.split("|"))
-    await state.update_data(segments=segments)
-    await _clear_after(state, ("splits", "total"))
+    segments, segment_types = _decode_template_payload(callback_data.value)
+    if not segment_types and segments:
+        segment_types = tuple("swim" for _ in segments)
+    await state.update_data(segments=segments, segment_types=list(segment_types))
+    await _clear_after(state, ("splits", "turn_times", "total"))
     await state.set_state(AddWizardStates.enter_splits)
     await _show_splits_step(callback.message, segments)
 
@@ -351,15 +533,51 @@ async def input_splits(message: types.Message, state: FSMContext) -> None:
 
     data = await state.get_data()
     segments = data.get("segments") or ()
-    if segments and len(segments) != len(splits):
+    segment_types = data.get("segment_types") or ()
+    expected_splits = _count_swim_segments(segment_types, len(segments))
+    if segments and expected_splits and expected_splits != len(splits):
         await message.answer(
             "Кількість сплітів не відповідає шаблону. Спробуйте ще раз."
         )
         return
 
     await state.update_data(splits=splits)
+    turn_required = _needs_turn_step(data.get("style"), segment_types)
+    if turn_required:
+        turn_count = _count_turn_segments(segment_types)
+        if turn_count > 0:
+            await state.set_state(AddWizardStates.enter_turn_details)
+            await _show_turn_details_step(message, turn_count)
+            return
     await state.set_state(AddWizardStates.enter_total)
-    await _show_total_step(message)
+    back_target = "turns" if turn_required else "splits"
+    await _show_total_step(message, back_target)
+
+
+@router.message(AddWizardStates.enter_turn_details)
+async def input_turn_details(message: types.Message, state: FSMContext) -> None:
+    """Handle turn detail input for strokes that require it."""
+
+    text = message.text or ""
+    chunks = text.replace(",", " ").split()
+    try:
+        turn_times = parse_splits(chunks)
+    except ValueError:
+        await message.answer(t("error.invalid_time"))
+        return
+
+    data = await state.get_data()
+    segment_types = data.get("segment_types") or ()
+    expected_turns = _count_turn_segments(segment_types)
+    if expected_turns and len(turn_times) != expected_turns:
+        await message.answer(
+            "Кількість поворотів не відповідає шаблону. Спробуйте ще раз."
+        )
+        return
+
+    await state.update_data(turn_times=turn_times)
+    await state.set_state(AddWizardStates.enter_total)
+    await _show_total_step(message, "turns")
 
 
 @router.callback_query(
@@ -369,18 +587,42 @@ async def even_from_total(callback: types.CallbackQuery, state: FSMContext) -> N
     data = await state.get_data()
     total = data.get("total")
     segments = data.get("segments") or ()
+    segment_types = data.get("segment_types") or ()
+    turn_times = data.get("turn_times") or []
+    if not segment_types:
+        turn_times = []
     if total is None:
         await callback.answer("Спочатку введіть сумарний час.", show_alert=True)
         return
     if not segments:
         await callback.answer("Немає даних про шаблон відрізків.", show_alert=True)
         return
-    distance = float(sum(segments))
+    if segment_types:
+        swim_segments = [
+            value
+            for value, seg_type in zip(segments, segment_types)
+            if seg_type != "turn"
+        ]
+    else:
+        swim_segments = list(segments)
+    if not swim_segments:
+        await callback.answer(
+            "Немає відрізків для розрахунку сплітів.", show_alert=True
+        )
+        return
+    distance = float(sum(swim_segments))
     if distance <= 0:
         await callback.answer("Невірний шаблон відрізків.", show_alert=True)
         return
-    factor = total / distance
-    splits = [round(segment * factor, 5) for segment in segments]
+    available_total = total - sum(float(value) for value in turn_times)
+    if available_total <= 0:
+        await callback.answer(
+            "Total має бути більшим за суму поворотів.",
+            show_alert=True,
+        )
+        return
+    factor = available_total / distance
+    splits = [round(segment * factor, 5) for segment in swim_segments]
     await state.update_data(splits=splits)
     await callback.answer()
     await callback.message.answer(
@@ -399,10 +641,15 @@ async def input_total(message: types.Message, state: FSMContext) -> None:
 
     data = await state.get_data()
     splits = data.get("splits") or []
+    segment_types = data.get("segment_types") or []
+    turn_times = data.get("turn_times") or []
+    if not segment_types:
+        turn_times = []
+    combined_splits = _combine_times_by_type(segment_types, splits, turn_times)
     try:
-        validate_splits(total, splits)
+        validate_splits(total, combined_splits)
     except ValueError:
-        diff = abs(sum(float(value) for value in splits) - total)
+        diff = abs(sum(float(value) for value in combined_splits) - total)
         await message.answer(t("error.splits_mismatch", diff=fmt_time(diff)))
         return
 
@@ -430,11 +677,25 @@ async def navigate_back(
     await callback.answer()
     if target == "style":
         await state.set_state(AddWizardStates.choose_style)
-        await _clear_after(state, ("style", "distance", "segments", "splits", "total"))
+        await _clear_after(
+            state,
+            (
+                "style",
+                "distance",
+                "segments",
+                "segment_types",
+                "splits",
+                "turn_times",
+                "total",
+            ),
+        )
         await _show_style_step(callback.message)
     elif target == "distance":
         await state.set_state(AddWizardStates.choose_distance)
-        await _clear_after(state, ("distance", "segments", "splits", "total"))
+        await _clear_after(
+            state,
+            ("distance", "segments", "segment_types", "splits", "turn_times", "total"),
+        )
         await _show_distance_step(callback.message)
     elif target == "template":
         data = await state.get_data()
@@ -444,17 +705,34 @@ async def navigate_back(
             await _show_distance_step(callback.message)
             return
         await state.set_state(AddWizardStates.choose_template)
-        await _clear_after(state, ("segments", "splits", "total"))
-        await _show_template_step(callback.message, distance)
+        await _clear_after(
+            state, ("segments", "segment_types", "splits", "turn_times", "total")
+        )
+        await _show_template_step(callback.message, distance, data.get("style"))
     elif target == "splits":
         data = await state.get_data()
         segments = data.get("segments") or ()
         await state.set_state(AddWizardStates.enter_splits)
-        await _clear_after(state, ("splits", "total"))
+        await _clear_after(state, ("splits", "turn_times", "total"))
         await _show_splits_step(callback.message, segments)
+    elif target == "turns":
+        data = await state.get_data()
+        turn_count = _count_turn_segments(data.get("segment_types") or ())
+        await state.set_state(AddWizardStates.enter_turn_details)
+        await _clear_after(state, ("turn_times", "total"))
+        if turn_count > 0:
+            await _show_turn_details_step(callback.message, turn_count)
+        else:
+            await callback.message.answer("Поворотів у цьому шаблоні немає.")
     elif target == "total":
         await state.set_state(AddWizardStates.enter_total)
         await _clear_after(state, ("total",))
-        await _show_total_step(callback.message)
+        data = await state.get_data()
+        back_target = (
+            "turns"
+            if _needs_turn_step(data.get("style"), data.get("segment_types") or ())
+            else "splits"
+        )
+        await _show_total_step(callback.message, back_target)
     else:
         await callback.message.answer("Ця дія недоступна.")
