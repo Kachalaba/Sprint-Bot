@@ -90,6 +90,28 @@ class CommentCB(CallbackData, prefix="comment"):
     athlete_id: int
 
 
+class TurnDetailsCB(CallbackData, prefix="turn"):
+    """Callback data for managing turn entry and analysis actions."""
+
+    action: str
+    turn_number: int
+    value: str = ""
+
+    def __post_init__(self) -> None:
+        """Validate turn data ensuring realistic elite swimmer ranges."""
+
+        if self.turn_number < 0:
+            raise ValueError("Turn number must be non-negative.")
+        if not self.value:
+            return
+        try:
+            turn_time = float(self.value)
+        except ValueError as exc:  # pragma: no cover - defensive branch
+            raise ValueError("Turn value must be a number.") from exc
+        if not 0.3 <= turn_time <= 2.0:
+            raise ValueError("Turn value must be between 0.3 and 2.0 seconds.")
+
+
 class AddWizardCB(CallbackData, prefix="aw"):
     """Callback factory for add-result wizard actions."""
 
@@ -397,6 +419,60 @@ def get_result_actions_keyboard(
             ],
         ]
     )
+
+
+def turn_entry_keyboard(turn_count: int) -> InlineKeyboardMarkup:
+    """Return inline keyboard for entering individual turn times."""
+
+    if turn_count <= 0:
+        raise ValueError("Turn count must be positive.")
+
+    buttons: list[list[InlineKeyboardButton]] = []
+    row: list[InlineKeyboardButton] = []
+    for turn_idx in range(1, turn_count + 1):
+        row.append(
+            InlineKeyboardButton(
+                text=t("turn.entry.button", number=turn_idx),
+                callback_data=TurnDetailsCB(
+                    action="input", turn_number=turn_idx
+                ).pack(),
+            )
+        )
+        if len(row) == 3:
+            buttons.append(row)
+            row = []
+
+    if row:
+        buttons.append(row)
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def turn_analysis_keyboard(stroke: str | None = None) -> InlineKeyboardMarkup | None:
+    """Return keyboard with turn analysis options for supported strokes."""
+
+    supported_strokes = {"breaststroke", "butterfly"}
+    if stroke is not None and stroke not in supported_strokes:
+        return None
+
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text=t("turn.analysis.button"),
+                callback_data=TurnDetailsCB(action="analysis", turn_number=0).pack(),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=t("turn.recommendation.button"),
+                callback_data=TurnDetailsCB(
+                    action="recommendation", turn_number=0
+                ).pack(),
+            )
+        ],
+    ]
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def get_main_keyboard(role: str) -> InlineKeyboardMarkup:
