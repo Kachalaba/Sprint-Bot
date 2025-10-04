@@ -1,5 +1,6 @@
-from __future__ import annotations
+"""Common fixtures shared by turn analytics test modules."""
 
+import importlib
 import os
 import sys
 from datetime import datetime, timedelta, timezone
@@ -12,9 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from services.turn_service import TurnService
-
 os.environ.setdefault("BOT_TOKEN", "123456:TESTTOKEN")
+
+TurnService = importlib.import_module("services.turn_service").TurnService
 
 
 @pytest.fixture

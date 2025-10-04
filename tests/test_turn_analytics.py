@@ -1,6 +1,5 @@
-from __future__ import annotations
-
 import asyncio
+import importlib
 import importlib.util
 import sqlite3
 import sys
@@ -15,31 +14,43 @@ import pytest
 matplotlib.use("Agg")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-stats_spec = importlib.util.spec_from_file_location(
-    "services.stats_service", PROJECT_ROOT / "services" / "stats_service.py"
-)
-stats_module = importlib.util.module_from_spec(stats_spec)
-assert stats_spec.loader is not None
-stats_spec.loader.exec_module(stats_module)
-
-services_stub = types.ModuleType("services")
-services_stub.__path__ = [str(PROJECT_ROOT / "services")]
-services_stub.ws_athletes = SimpleNamespace(get_all_values=lambda: [])
-services_stub.ws_results = SimpleNamespace(get_all_values=lambda: [])
-sys.modules["services"] = services_stub
-sys.modules["services.stats_service"] = stats_module
-
-from handlers.progress import (
-    _build_turn_comparison_plot,
-    _build_turn_efficiency_plot,
-    _build_turn_heatmap,
-    _format_turn_summary,
-    _group_turn_sessions,
-)
-from services.stats_service import StatsPeriod, StatsService, TurnProgressResult
 
 
-def test_stats_service_turn_analytics_queries(tmp_path: Path) -> None:
+@pytest.fixture(scope="module")
+def progress_module() -> types.ModuleType:
+    """Provide access to turn plotting helpers with safe service stubs."""
+
+    monkeypatch = pytest.MonkeyPatch()
+    stats_spec = importlib.util.spec_from_file_location(
+        "services.stats_service", PROJECT_ROOT / "services" / "stats_service.py"
+    )
+    stats_module = importlib.util.module_from_spec(stats_spec)
+    assert stats_spec.loader is not None
+    stats_spec.loader.exec_module(stats_module)
+
+    services_stub = types.ModuleType("services")
+    services_stub.__path__ = [str(PROJECT_ROOT / "services")]
+    services_stub.ws_athletes = SimpleNamespace(
+        get_all_values=lambda: [], get_all_records=lambda: []
+    )
+    services_stub.ws_results = SimpleNamespace(get_all_values=lambda: [])
+    monkeypatch.setitem(sys.modules, "services", services_stub)
+    monkeypatch.setitem(sys.modules, "services.stats_service", stats_module)
+
+    module = importlib.import_module("handlers.progress")
+    try:
+        yield module
+    finally:
+        monkeypatch.undo()
+
+
+def test_stats_service_turn_analytics_queries(
+    tmp_path: Path, progress_module: types.ModuleType
+) -> None:
+    StatsService = progress_module.StatsService
+    StatsPeriod = progress_module.StatsPeriod
+    format_turn_summary = progress_module._format_turn_summary
+
     async def scenario() -> None:
         db_dir = tmp_path / "turns"
         db_dir.mkdir(parents=True, exist_ok=True)
@@ -134,26 +145,35 @@ def test_stats_service_turn_analytics_queries(tmp_path: Path) -> None:
         assert turn1.delta == pytest.approx(0.5, rel=1e-3)
         assert turn1.percent_change == pytest.approx(0.5 / 5.2 * 100, rel=1e-3)
 
-        summary = _format_turn_summary("breaststroke", progress)
+        summary = format_turn_summary("breaststroke", progress)
         assert summary.startswith("<b>")
         assert "#1" in summary
 
     asyncio.run(scenario())
 
 
-def test_grouping_and_plots_produce_png(sample_turn_rows: list[dict]) -> None:
-    sessions = _group_turn_sessions(sample_turn_rows)
+def test_grouping_and_plots_produce_png(
+    sample_turn_rows: list[dict], progress_module: types.ModuleType
+) -> None:
+    group_turn_sessions = progress_module._group_turn_sessions
+    build_turn_efficiency_plot = progress_module._build_turn_efficiency_plot
+    build_turn_comparison_plot = progress_module._build_turn_comparison_plot
+    build_turn_heatmap = progress_module._build_turn_heatmap
+    TurnProgressResult = progress_module.TurnProgressResult
+    format_turn_summary = progress_module._format_turn_summary
+
+    sessions = group_turn_sessions(sample_turn_rows)
     assert len(sessions) == 2
     assert sessions[0]["turns"][0]["turn_number"] == 1
     athlete_name = sample_turn_rows[0]["athlete_name"]
 
-    efficiency_plot = _build_turn_efficiency_plot(
+    efficiency_plot = build_turn_efficiency_plot(
         sessions, athlete_name, "breaststroke"
     )
-    comparison_plot = _build_turn_comparison_plot(
+    comparison_plot = build_turn_comparison_plot(
         sessions, athlete_name, "breaststroke"
     )
-    heatmap_plot = _build_turn_heatmap(sessions, athlete_name, "breaststroke")
+    heatmap_plot = build_turn_heatmap(sessions, athlete_name, "breaststroke")
 
     for image in (efficiency_plot, comparison_plot, heatmap_plot):
         assert image is not None
@@ -163,6 +183,6 @@ def test_grouping_and_plots_produce_png(sample_turn_rows: list[dict]) -> None:
         TurnProgressResult(turn_number=1, efficiency_trend=-0.1, improvement_rate=5.0),
         TurnProgressResult(turn_number=2, efficiency_trend=0.2, improvement_rate=-3.0),
     )
-    summary = _format_turn_summary("butterfly", custom_progress)
+    summary = format_turn_summary("butterfly", custom_progress)
     assert summary.startswith("<b>")
     assert "#2" in summary
