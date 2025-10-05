@@ -1,18 +1,28 @@
+version: "3.8"
+
 services:
-  bot:
+  sprint-bot:
     build: .
-    command: python bot.py
+    ports:
+      - "8443:8443"
     volumes:
-      - ./db:/app/db
-      - ./logs:/app/logs
-    restart: unless-stopped
-    env_file:
-      - .env
+      - sprint-bot-data:/app/data
+      - sprint-bot-logs:/app/logs
     environment:
-      - PYTHONUNBUFFERED=1
-    healthcheck:
-      test: ["CMD", "python", "-c", "import os; print(1)"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+      BOT_TOKEN: ${BOT_TOKEN}
+      ADMIN_IDS: ${ADMIN_IDS}
+      SENTRY_DSN: ${SENTRY_DSN}
+      QUIET_HOURS: ${QUIET_HOURS}
+      QUIET_QUEUE_INTERVAL: ${QUIET_QUEUE_INTERVAL}
+      QUIET_HOURS_TZ: ${QUIET_HOURS_TZ}
+      S3_BACKUP_BUCKET: ${S3_BACKUP_BUCKET}
+      S3_BACKUP_PREFIX: ${S3_BACKUP_PREFIX}
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS}
+      S3_STORAGE_CLASS: ${S3_STORAGE_CLASS}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL}
+      ENV: ${ENV}
+    restart: unless-stopped
+
+volumes:
+  sprint-bot-data:
+  sprint-bot-logs:
