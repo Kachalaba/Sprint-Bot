@@ -1,13 +1,4 @@
 from __future__ import annotations
-
-"""Utilities for analysing sprint progress and personal records.
-
-The leaderboard metric is the number of new personal records (PR) achieved
-within the requested period. This keeps the implementation lightweight and
-ensures the ranking can be computed directly from the stored attempts without
-reconstructing historical deltas.
-"""
-
 import asyncio
 import sqlite3
 from collections import defaultdict
@@ -17,8 +8,6 @@ from enum import Enum
 from pathlib import Path
 from statistics import fmean
 from typing import Iterable, Sequence
-
-
 @dataclass(frozen=True)
 class TotalPRResult:
     """Information about overall personal record status."""
