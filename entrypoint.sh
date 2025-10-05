@@ -19,5 +19,4 @@ if [ -z "${BOT_TOKEN:-}" ]; then
   exit 1
 fi
 
-python db.py
 python bot.py
