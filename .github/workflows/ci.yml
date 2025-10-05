@@ -32,3 +32,6 @@ jobs:
 
       - name: Run pytest with coverage
         run: pytest --cov=services --cov=utils --cov-report=term-missing --cov-fail-under=60
+
+      - name: Run turn analytics tests
+        run: pytest tests/test_turn_service.py tests/test_turn_analytics.py -q

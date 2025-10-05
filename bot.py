@@ -18,6 +18,7 @@ from utils.sentry import init_sentry
 if TYPE_CHECKING:
     from backup_service import BackupService
     from notifications import NotificationService, drain_queue
+    from services.turn_service import TurnService
 
 logger = get_logger(__name__)
 
@@ -156,6 +157,7 @@ def _backup_interval_from_env(default_hours: float = 6.0) -> timedelta:
 def setup_dispatcher(
     notification_service: "NotificationService",
     backup_service: "BackupService",
+    turn_service: "TurnService",
 ) -> Dispatcher:
     """Configure dispatcher with routers."""
     from handlers.add_wizard import router as add_wizard_router
@@ -180,6 +182,10 @@ def setup_dispatcher(
 
     dp = Dispatcher()
     dp.update.middleware(CommandLoggingMiddleware(logger))
+    try:
+        dp.workflow_data.update(turn_service=turn_service)
+    except AttributeError:
+        dp.workflow_data = {"turn_service": turn_service}
     dp.include_router(registration_router)
     dp.include_router(onboarding_router)
     dp.include_router(menu_router)
@@ -214,7 +220,7 @@ async def main() -> None:
     from middlewares.roles import RoleMiddleware
     from notifications import NotificationService
     from role_service import RoleService
-    from services import ADMIN_IDS, bot
+    from services import ADMIN_IDS, TurnService, bot
     from services.audit_service import AuditService
     from services.io_service import IOService
     from services.query_service import QueryService
@@ -222,6 +228,7 @@ async def main() -> None:
     from services.user_service import UserService
     from template_service import TemplateService
 
+    turn_service = TurnService()
     notification_service = NotificationService(bot=bot)
     chat_service = ChatService()
     await chat_service.init()
@@ -250,7 +257,7 @@ async def main() -> None:
         storage_class=os.getenv("S3_STORAGE_CLASS") or None,
         endpoint_url=os.getenv("S3_ENDPOINT_URL") or None,
     )
-    dp = setup_dispatcher(notification_service, backup_service)
+    dp = setup_dispatcher(notification_service, backup_service, turn_service)
     dp.update.middleware(RoleMiddleware(role_service))
     await configure_bot_commands(bot)
     queue_task = asyncio.create_task(drain_queue(), name="notification-queue-drain")
@@ -267,6 +274,7 @@ async def main() -> None:
             stats_service=stats_service,
             io_service=io_service,
             audit_service=audit_service,
+            turn_service=turn_service,
         )
     finally:
         queue_task.cancel()

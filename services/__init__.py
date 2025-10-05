@@ -6,6 +6,10 @@ from importlib import import_module
 from types import ModuleType
 from typing import Any
 
+from .turn_service import TurnService
+
+__all__ = ["TurnService"]
+
 _BASE_MODULE: ModuleType | None = None
 
 
