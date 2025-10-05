@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Optional
 import asyncio
 import sqlite3
 from collections import defaultdict
@@ -12,7 +13,7 @@ from typing import Iterable, Sequence
 class TotalPRResult:
     """Information about overall personal record status."""
 
-    previous: float | None
+    previous: Optional[float]
     current: float
     is_new: bool
     delta: float
@@ -22,7 +23,7 @@ class TotalPRResult:
 class SobStats:
     """Describe Sum of Best calculations for a result."""
 
-    previous: float | None
+    previous: Optional[float]
     current: float
     delta: float
 
@@ -72,10 +73,10 @@ class TurnComparison:
     """Compare average turn efficiency between two periods."""
 
     turn_number: int
-    previous_avg: float | None
-    current_avg: float | None
-    delta: float | None
-    percent_change: float | None
+    previous_avg: Optional[float]
+    current_avg: Optional[float]
+    delta: Optional[float]
+    percent_change: Optional[float]
 
 
 class StatsPeriod(str, Enum):
@@ -434,7 +435,7 @@ class StatsService:
         return numerator / denominator
 
     @staticmethod
-    def _safe_float(value: float | int | str | None) -> float | None:
+    def _safe_float(value: float | int | str | None) -> Optional[float]:
         if value is None:
             return None
         try:
@@ -455,7 +456,7 @@ class StatsService:
             raise ValueError(f"invalid timestamp format: {text!r}") from exc
 
 
-def calc_total_pr(previous_best: float | None, current_total: float) -> TotalPRResult:
+def calc_total_pr(previous_best: Optional[float], current_total: float) -> TotalPRResult:
     """Return total PR status comparing new total with the previous best."""
 
     is_new = previous_best is None or current_total < previous_best
@@ -472,7 +473,7 @@ def calc_total_pr(previous_best: float | None, current_total: float) -> TotalPRR
 
 
 def calc_segment_prs(
-    previous_bests: Sequence[float | None],
+    previous_bests: Sequence[Optional[float]],
     new_segments: Sequence[float],
 ) -> list[bool]:
     """Return list of flags showing which segments improved."""
@@ -485,7 +486,7 @@ def calc_segment_prs(
 
 
 def calc_sob(
-    previous_bests: Sequence[float | None],
+    previous_bests: Sequence[Optional[float]],
     new_segments: Sequence[float],
 ) -> SobStats:
     """Calculate Sum of Best metrics for provided segment times."""
