@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Utilities for analysing sprint progress and personal records.
 
 The leaderboard metric is the number of new personal records (PR) achieved
@@ -5,8 +7,6 @@ within the requested period. This keeps the implementation lightweight and
 ensures the ranking can be computed directly from the stored attempts without
 reconstructing historical deltas.
 """
-
-from __future__ import annotations
 
 import asyncio
 import sqlite3
