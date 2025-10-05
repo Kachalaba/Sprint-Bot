@@ -1,44 +1,52 @@
-"""Utilities for analysing sprint progress and personal records.
-
-The leaderboard metric is the number of new personal records (PR) achieved
-within the requested period. This keeps the implementation lightweight and
-ensures the ranking can be computed directly from the stored attempts without
-reconstructing historical deltas.
-"""
-
 from __future__ import annotations
-
+from typing import Optional
 import asyncio
 import sqlite3
 from collections import defaultdict
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from statistics import fmean
 from typing import Iterable, Sequence
-
-
-@dataclass(frozen=True)
 class TotalPRResult:
     """Information about overall personal record status."""
 
-    previous: float | None
+    previous: Optional[float]
     current: float
     is_new: bool
     delta: float
 
+    def __init__(
+        self,
+        previous: Optional[float],
+        current: float,
+        is_new: bool,
+        delta: float,
+    ) -> None:
+        self.previous = previous
+        self.current = current
+        self.is_new = is_new
+        self.delta = delta
 
-@dataclass(frozen=True)
+
 class SobStats:
     """Describe Sum of Best calculations for a result."""
 
-    previous: float | None
+    previous: Optional[float]
     current: float
     delta: float
 
+    def __init__(
+        self,
+        previous: Optional[float],
+        current: float,
+        delta: float,
+    ) -> None:
+        self.previous = previous
+        self.current = current
+        self.delta = delta
 
-@dataclass(frozen=True, slots=True)
+
 class LeaderboardEntry:
     """Single leaderboard row for a period."""
 
@@ -47,8 +55,19 @@ class LeaderboardEntry:
     pr_count: int
     attempts: int
 
+    def __init__(
+        self,
+        athlete_id: int,
+        athlete_name: str,
+        pr_count: int,
+        attempts: int,
+    ) -> None:
+        self.athlete_id = athlete_id
+        self.athlete_name = athlete_name
+        self.pr_count = pr_count
+        self.attempts = attempts
 
-@dataclass(frozen=True, slots=True)
+
 class ProgressResult:
     """Highlight attempt used in personal progress summaries."""
 
@@ -58,8 +77,21 @@ class ProgressResult:
     timestamp: datetime
     is_pr: bool
 
+    def __init__(
+        self,
+        stroke: str,
+        distance: int,
+        total_seconds: float,
+        timestamp: datetime,
+        is_pr: bool,
+    ) -> None:
+        self.stroke = stroke
+        self.distance = distance
+        self.total_seconds = total_seconds
+        self.timestamp = timestamp
+        self.is_pr = is_pr
 
-@dataclass(frozen=True, slots=True)
+
 class WeeklyProgress:
     """Personal summary for the last week."""
 
@@ -68,8 +100,19 @@ class WeeklyProgress:
     pr_count: int
     highlights: tuple[ProgressResult, ...]
 
+    def __init__(
+        self,
+        athlete_id: int,
+        attempts: int,
+        pr_count: int,
+        highlights: tuple[ProgressResult, ...],
+    ) -> None:
+        self.athlete_id = athlete_id
+        self.attempts = attempts
+        self.pr_count = pr_count
+        self.highlights = highlights
 
-@dataclass(frozen=True, slots=True)
+
 class TurnProgressResult:
     """Describe efficiency trend for a specific turn number."""
 
@@ -77,16 +120,39 @@ class TurnProgressResult:
     efficiency_trend: float
     improvement_rate: float
 
+    def __init__(
+        self,
+        turn_number: int,
+        efficiency_trend: float,
+        improvement_rate: float,
+    ) -> None:
+        self.turn_number = turn_number
+        self.efficiency_trend = efficiency_trend
+        self.improvement_rate = improvement_rate
 
-@dataclass(frozen=True, slots=True)
+
 class TurnComparison:
     """Compare average turn efficiency between two periods."""
 
     turn_number: int
-    previous_avg: float | None
-    current_avg: float | None
-    delta: float | None
-    percent_change: float | None
+    previous_avg: Optional[float]
+    current_avg: Optional[float]
+    delta: Optional[float]
+    percent_change: Optional[float]
+
+    def __init__(
+        self,
+        turn_number: int,
+        previous_avg: Optional[float],
+        current_avg: Optional[float],
+        delta: Optional[float],
+        percent_change: Optional[float],
+    ) -> None:
+        self.turn_number = turn_number
+        self.previous_avg = previous_avg
+        self.current_avg = current_avg
+        self.delta = delta
+        self.percent_change = percent_change
 
 
 class StatsPeriod(str, Enum):
@@ -445,7 +511,7 @@ class StatsService:
         return numerator / denominator
 
     @staticmethod
-    def _safe_float(value: float | int | str | None) -> float | None:
+    def _safe_float(value: float | int | str | None) -> Optional[float]:
         if value is None:
             return None
         try:
@@ -466,7 +532,7 @@ class StatsService:
             raise ValueError(f"invalid timestamp format: {text!r}") from exc
 
 
-def calc_total_pr(previous_best: float | None, current_total: float) -> TotalPRResult:
+def calc_total_pr(previous_best: Optional[float], current_total: float) -> TotalPRResult:
     """Return total PR status comparing new total with the previous best."""
 
     is_new = previous_best is None or current_total < previous_best
@@ -483,7 +549,7 @@ def calc_total_pr(previous_best: float | None, current_total: float) -> TotalPRR
 
 
 def calc_segment_prs(
-    previous_bests: Sequence[float | None],
+    previous_bests: Sequence[Optional[float]],
     new_segments: Sequence[float],
 ) -> list[bool]:
     """Return list of flags showing which segments improved."""
@@ -496,7 +562,7 @@ def calc_segment_prs(
 
 
 def calc_sob(
-    previous_bests: Sequence[float | None],
+    previous_bests: Sequence[Optional[float]],
     new_segments: Sequence[float],
 ) -> SobStats:
     """Calculate Sum of Best metrics for provided segment times."""

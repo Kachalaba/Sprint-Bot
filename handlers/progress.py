@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+import os
 from collections import OrderedDict, defaultdict
 from datetime import datetime
 from typing import Iterable, Sequence
@@ -10,11 +11,13 @@ from typing import Iterable, Sequence
 import matplotlib
 from aiogram import F, Router, types
 from aiogram.filters import Command
-from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (BufferedInputFile, InlineKeyboardButton,
+                           InlineKeyboardMarkup)
 
 from role_service import ROLE_ATHLETE, RoleService
 from services import ws_athletes, ws_results
-from services.stats_service import StatsPeriod, StatsService, TurnProgressResult
+from services.stats_service import (StatsPeriod, StatsService,
+                                    TurnProgressResult)
 from utils import fmt_time
 
 matplotlib.use("Agg")
@@ -41,6 +44,12 @@ _STROKE_TITLES = {
     "breaststroke": "Брасс",
     "butterfly": "Баттерфляй",
 }
+
+_DEFAULT_TURN_STROKE = (
+    os.getenv("TURN_ANALYSIS_DEFAULT_STROKE", "breaststroke").strip().lower()
+)
+if _DEFAULT_TURN_STROKE not in _SUPPORTED_TURN_STROKES:
+    _DEFAULT_TURN_STROKE = "breaststroke"
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -539,7 +548,7 @@ async def cmd_turn_analysis(
         await message.answer("Команда доступна лише для зареєстрованих користувачів.")
         return
     stroke_arg, requested_id = _parse_turn_command(message)
-    stroke = stroke_arg or "breaststroke"
+    stroke = stroke_arg or _DEFAULT_TURN_STROKE
     if stroke not in _SUPPORTED_TURN_STROKES:
         await message.answer(
             "Доступні стилі: breaststroke, butterfly. Приклад: /turn_analysis butterfly"
