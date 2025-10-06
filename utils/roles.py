@@ -63,15 +63,18 @@ class RequireRolesFilter(BaseFilter):
         self._ordered_roles: Tuple[str, ...] = normalized_roles
         self.context_key = context_key
 
-    async def __call__(self, event: TelegramObject, data: Dict[str, Any]) -> bool:
-        role = data.get(self.context_key)
+    async def __call__(
+        self, event: TelegramObject, data: Dict[str, Any] | None = None
+    ) -> bool:
+        context = data if data is not None else {}
+        role = context.get(self.context_key)
         if role is None:
-            role_service: RoleService | None = data.get("role_service")
+            role_service: RoleService | None = context.get("role_service")
             user = getattr(event, "from_user", None)
             if role_service is None or user is None:
                 return False
             role = await role_service.get_role(user.id)
-            data[self.context_key] = role
+            context[self.context_key] = role
         return str(role) in self.allowed_roles
 
     def extend(self, roles: Iterable[str]) -> "RequireRolesFilter":
