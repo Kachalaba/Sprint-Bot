@@ -18,29 +18,27 @@ class StubRoleService:
 def test_require_roles_accepts_role_from_context() -> None:
     filt = require_roles("admin")
     event = SimpleNamespace(from_user=SimpleNamespace(id=1))
-    data = {"user_role": "admin"}
-    assert asyncio.run(filt(event, data))
+    assert asyncio.run(filt(event, user_role="admin"))
 
 
 def test_require_roles_fetches_role_from_service() -> None:
     service = StubRoleService({2: "coach"})
     filt = require_roles("coach")
     event = SimpleNamespace(from_user=SimpleNamespace(id=2))
-    data = {"role_service": service}
-    assert asyncio.run(filt(event, data))
-    assert data["user_role"] == "coach"
+    result = asyncio.run(filt(event, role_service=service))
+    assert result == {"user_role": "coach"}
 
 
 def test_require_roles_denies_without_service() -> None:
     filt = require_roles("admin")
     event = SimpleNamespace(from_user=SimpleNamespace(id=3))
-    assert not asyncio.run(filt(event, {}))
+    assert not asyncio.run(filt(event))
 
 
 def test_require_roles_denies_when_user_missing() -> None:
     filt = require_roles("admin")
     event = SimpleNamespace()
-    assert not asyncio.run(filt(event, {"role_service": StubRoleService({})}))
+    assert not asyncio.run(filt(event, role_service=StubRoleService({})))
 
 
 def test_require_roles_extend_creates_new_filter() -> None:
