@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Set
+from typing import Any, Dict, Iterable, Set
 
 from aiogram.filters import BaseFilter
 from aiogram.types import CallbackQuery, Message, TelegramObject
@@ -18,7 +18,11 @@ class RoleFilter(BaseFilter):
             raise ValueError("RoleFilter requires at least one role")
         self.allowed_roles: Set[str] = set(roles)
 
-    async def __call__(self, event: TelegramObject, role_service: RoleService) -> bool:
+    async def __call__(self, event: TelegramObject, data: Dict[str, Any]) -> bool:
+        role_service: RoleService | None = data.get("role_service")
+        if role_service is None:
+            return False
+
         user_id = None
         if isinstance(event, Message):
             user_id = event.from_user.id if event.from_user else None
