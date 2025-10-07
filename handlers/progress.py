@@ -15,7 +15,7 @@ from aiogram.types import (BufferedInputFile, InlineKeyboardButton,
                            InlineKeyboardMarkup)
 
 from role_service import ROLE_ATHLETE, RoleService
-from services import ws_athletes, ws_results
+from services import get_athletes_worksheet, get_results_worksheet
 from services.stats_service import (StatsPeriod, StatsService,
                                     TurnProgressResult)
 from utils import fmt_time
@@ -376,7 +376,15 @@ async def _send_progress_report(
     """Render progress for athlete and send to requester."""
 
     try:
-        raw_rows = ws_results.get_all_values()
+        worksheet = get_results_worksheet()
+        raw_rows = worksheet.get_all_values()
+    except RuntimeError as exc:
+        logger.error("Failed to access results worksheet: %s", exc, exc_info=True)
+        target = event.message if isinstance(event, types.CallbackQuery) else event
+        await target.answer("Не вдалося отримати доступ до таблиці результатів.")
+        if isinstance(event, types.CallbackQuery):
+            await event.answer()
+        return
     except Exception as exc:  # pragma: no cover - external service
         logger.error("Failed to load results: %s", exc, exc_info=True)
         target = event.message if isinstance(event, types.CallbackQuery) else event
@@ -455,7 +463,14 @@ async def cmd_progress(
         return
 
     try:
-        records = ws_athletes.get_all_records()
+        worksheet = get_athletes_worksheet()
+        records = worksheet.get_all_records()
+    except RuntimeError as exc:
+        logger.error("Failed to access athletes worksheet: %s", exc, exc_info=True)
+        await message.answer(
+            "Не вдалося отримати доступ до таблиці спортсменів. Спробуйте пізніше."
+        )
+        return
     except Exception as exc:  # pragma: no cover - depends on external service
         logger.error("Failed to load athletes: %s", exc, exc_info=True)
         await message.answer(

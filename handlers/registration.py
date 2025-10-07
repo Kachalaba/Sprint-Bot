@@ -12,7 +12,7 @@ from aiogram.fsm.state import State, StatesGroup
 from handlers.menu import build_menu_keyboard
 from menu_callbacks import CB_MENU_INVITE
 from role_service import ROLE_ATHLETE, ROLE_TRAINER, RoleService
-from services import get_bot, ws_athletes
+from services import get_athletes_worksheet, get_bot
 from utils.roles import require_roles
 
 logger = logging.getLogger(__name__)
@@ -75,7 +75,16 @@ async def process_name(
     code = data.get("code")
     name = message.text or ""
     try:
-        ws_athletes.append_row(
+        worksheet = get_athletes_worksheet()
+    except RuntimeError as exc:
+        logger.error("Failed to access athletes worksheet: %s", exc)
+        await message.answer(
+            "Не вдалося отримати доступ до таблиці спортсменів. Спробуйте пізніше."
+        )
+        return
+
+    try:
+        worksheet.append_row(
             [
                 message.from_user.id,
                 name,

@@ -9,8 +9,12 @@ from i18n import reset_context_language, set_context_language, t
 
 def _load_reports_module(monkeypatch: pytest.MonkeyPatch):
     fake_services = types.ModuleType("services")
-    fake_services.ws_pr = types.SimpleNamespace(get_all_values=lambda: [])
-    fake_services.ws_results = types.SimpleNamespace(get_all_values=lambda: [])
+
+    def _empty_results_sheet():
+        return types.SimpleNamespace(get_all_values=lambda: [])
+
+    fake_services.get_pr_worksheet = _empty_results_sheet
+    fake_services.get_results_worksheet = _empty_results_sheet
     monkeypatch.setitem(sys.modules, "services", fake_services)
     module_name = "handlers.reports"
     if module_name in sys.modules:

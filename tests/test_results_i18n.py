@@ -11,8 +11,12 @@ from utils import fmt_time
 @pytest.mark.parametrize("lang", ["uk", "ru"])
 def test_result_card_translates_between_languages(monkeypatch, lang: str) -> None:
     fake_services = types.ModuleType("services")
-    fake_services.ws_pr = types.SimpleNamespace(get_all_values=lambda: [])
-    fake_services.ws_results = types.SimpleNamespace(get_all_values=lambda: [])
+
+    def _empty_results_sheet():
+        return types.SimpleNamespace(get_all_values=lambda: [])
+
+    fake_services.get_pr_worksheet = _empty_results_sheet
+    fake_services.get_results_worksheet = _empty_results_sheet
     monkeypatch.setitem(sys.modules, "services", fake_services)
     module = importlib.import_module("handlers.results")
     format_result_card = module.format_result_card

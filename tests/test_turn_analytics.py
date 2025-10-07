@@ -30,10 +30,13 @@ def progress_module() -> types.ModuleType:
 
     services_stub = types.ModuleType("services")
     services_stub.__path__ = [str(PROJECT_ROOT / "services")]
-    services_stub.ws_athletes = SimpleNamespace(
+
+    services_stub.get_athletes_worksheet = lambda: SimpleNamespace(
         get_all_values=lambda: [], get_all_records=lambda: []
     )
-    services_stub.ws_results = SimpleNamespace(get_all_values=lambda: [])
+    services_stub.get_results_worksheet = lambda: SimpleNamespace(
+        get_all_values=lambda: []
+    )
     monkeypatch.setitem(sys.modules, "services", services_stub)
     monkeypatch.setitem(sys.modules, "services.stats_service", stats_module)
 
@@ -167,12 +170,8 @@ def test_grouping_and_plots_produce_png(
     assert sessions[0]["turns"][0]["turn_number"] == 1
     athlete_name = sample_turn_rows[0]["athlete_name"]
 
-    efficiency_plot = build_turn_efficiency_plot(
-        sessions, athlete_name, "breaststroke"
-    )
-    comparison_plot = build_turn_comparison_plot(
-        sessions, athlete_name, "breaststroke"
-    )
+    efficiency_plot = build_turn_efficiency_plot(sessions, athlete_name, "breaststroke")
+    comparison_plot = build_turn_comparison_plot(sessions, athlete_name, "breaststroke")
     heatmap_plot = build_turn_heatmap(sessions, athlete_name, "breaststroke")
 
     for image in (efficiency_plot, comparison_plot, heatmap_plot):

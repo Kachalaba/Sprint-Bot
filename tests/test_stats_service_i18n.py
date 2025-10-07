@@ -19,10 +19,18 @@ def format_result_summary(monkeypatch: pytest.MonkeyPatch):
 
     services_stub = types.ModuleType("services")
     services_stub.__path__ = []  # mark as package for submodule imports
-    services_stub.ws_athletes = object()
-    services_stub.ws_log = object()
-    services_stub.ws_pr = object()
-    services_stub.ws_results = object()
+
+    empty_sheet = types.SimpleNamespace(
+        get_all_values=lambda: [],
+        append_row=lambda *args, **kwargs: None,
+        update=lambda *args, **kwargs: None,
+        cell=lambda *args, **kwargs: types.SimpleNamespace(value=""),
+    )
+
+    services_stub.get_athletes_worksheet = lambda: empty_sheet
+    services_stub.get_log_worksheet = lambda: empty_sheet
+    services_stub.get_pr_worksheet = lambda: empty_sheet
+    services_stub.get_results_worksheet = lambda: empty_sheet
     monkeypatch.setitem(sys.modules, "services", services_stub)
 
     stats_stub = types.ModuleType("services.stats_service")

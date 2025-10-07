@@ -15,7 +15,7 @@ from aiogram.types import BufferedInputFile, Message
 from i18n import t
 from reports import AttemptReport, SegmentReportRow, generate_image_report
 from role_service import RoleService
-from services import ws_pr, ws_results
+from services import get_pr_worksheet, get_results_worksheet
 from utils import get_segments
 
 router = Router()
@@ -119,7 +119,11 @@ def _load_last_result(athlete_id: int) -> ResultPayload | None:
     """Return latest attempt for the athlete."""
 
     try:
-        rows = ws_results.get_all_values()
+        worksheet = get_results_worksheet()
+        rows = worksheet.get_all_values()
+    except RuntimeError as exc:
+        logging.error("Failed to access results worksheet: %s", exc, exc_info=True)
+        return None
     except Exception as exc:  # pragma: no cover - network dependent
         logging.error("Failed to load results: %s", exc, exc_info=True)
         return None
@@ -137,7 +141,11 @@ def _load_best_total(athlete_id: int, stroke: str, distance: int) -> float | Non
     """Return best total time for an athlete stroke/distance pair."""
 
     try:
-        rows = ws_results.get_all_values()
+        worksheet = get_results_worksheet()
+        rows = worksheet.get_all_values()
+    except RuntimeError as exc:
+        logging.error("Failed to access results worksheet: %s", exc, exc_info=True)
+        return None
     except Exception as exc:  # pragma: no cover - network dependent
         logging.error("Failed to load totals: %s", exc, exc_info=True)
         return None
@@ -163,7 +171,11 @@ def _load_segment_bests(
     """Return best split per segment together with their timestamps."""
 
     try:
-        rows = ws_pr.get_all_values()
+        worksheet = get_pr_worksheet()
+        rows = worksheet.get_all_values()
+    except RuntimeError as exc:
+        logging.error("Failed to access PR worksheet: %s", exc, exc_info=True)
+        return [(None, None)] * segments_count
     except Exception as exc:  # pragma: no cover - network dependent
         logging.error("Failed to load segment PRs: %s", exc, exc_info=True)
         return [(None, None)] * segments_count
