@@ -12,7 +12,7 @@ from aiogram.fsm.state import State, StatesGroup
 from handlers.menu import build_menu_keyboard
 from menu_callbacks import CB_MENU_INVITE
 from role_service import ROLE_ATHLETE, ROLE_TRAINER, RoleService
-from services import bot, ws_athletes
+from services import get_bot, ws_athletes
 from utils.roles import require_roles
 
 logger = logging.getLogger(__name__)
@@ -36,6 +36,7 @@ async def send_invite(cb: types.CallbackQuery, role_service: RoleService) -> Non
     await role_service.upsert_user(cb.from_user, default_role=ROLE_TRAINER)
     code = secrets.token_hex(4)
     active_invites[code] = cb.from_user.id
+    bot = get_bot()
     me = await bot.get_me()
     link = f"https://t.me/{me.username}?start=\u0440\u0435\u0433_{code}"
 

@@ -16,10 +16,18 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
 # --- Bot Initialization ---
-TOKEN = os.getenv("BOT_TOKEN")
-if not TOKEN:
-    raise ValueError("BOT_TOKEN must be set in .env file")
-bot = Bot(token=TOKEN, parse_mode="HTML")
+
+
+@lru_cache(maxsize=1)
+def get_bot() -> Bot:
+    """Return a cached aiogram Bot instance configured for the project."""
+
+    token = os.getenv("BOT_TOKEN", "").strip()
+    if not token:
+        raise RuntimeError(
+            "BOT_TOKEN environment variable must be set and non-empty to create the bot."
+        )
+    return Bot(token=token, parse_mode="HTML")
 
 
 # --- Google Sheets Setup ---

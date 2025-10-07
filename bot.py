@@ -220,7 +220,7 @@ async def main() -> None:
     from middlewares.roles import RoleMiddleware
     from notifications import NotificationService
     from role_service import RoleService
-    from services import ADMIN_IDS, TurnService, bot
+    from services import ADMIN_IDS, TurnService, get_bot
     from services.audit_service import AuditService
     from services.io_service import IOService
     from services.query_service import QueryService
@@ -228,6 +228,7 @@ async def main() -> None:
     from services.user_service import UserService
     from template_service import TemplateService
 
+    bot = get_bot()
     turn_service = TurnService()
     notification_service = NotificationService(bot=bot)
     chat_service = ChatService()
