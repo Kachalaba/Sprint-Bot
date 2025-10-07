@@ -3,36 +3,15 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from dataclasses import dataclass
-from logging.handlers import RotatingFileHandler
-from pathlib import Path
 from typing import Iterable
 
 __all__ = ["TurnMetrics", "TurnService"]
 
 
-_LOGGER = logging.getLogger(__name__)
-if not _LOGGER.handlers:
-    _LOGGER.setLevel(logging.INFO)
-    log_path = Path("logs/bot.log")
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+from utils.logger import get_logger
 
-    file_handler = RotatingFileHandler(
-        log_path, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
-    )
-    file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(
-        logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
-    )
-    _LOGGER.addHandler(file_handler)
-
-    stream_handler = logging.StreamHandler()
-    stream_handler.setLevel(logging.WARNING)
-    stream_handler.setFormatter(
-        logging.Formatter("%(levelname)s %(name)s: %(message)s")
-    )
-    _LOGGER.addHandler(stream_handler)
+_LOGGER = get_logger(__name__)
 
 
 @dataclass
