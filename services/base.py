@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 
 import gspread
@@ -30,29 +31,97 @@ def get_bot() -> Bot:
     return Bot(token=token, parse_mode="HTML")
 
 
-# --- Google Sheets Setup ---
-try:
-    gc = gspread.service_account(filename="creds.json")
-    sh = gc.open_by_key(os.getenv("SPREADSHEET_KEY"))
+def _get_credentials_path() -> Path:
+    return Path("creds.json")
 
-    # Assign worksheets to variables
-    ws_results = sh.worksheet("results")
-    ws_pr = sh.worksheet("pr")
-    ws_log = sh.worksheet("log")
-    ws_athletes = sh.worksheet("AthletesList")  # Corrected worksheet name
 
-except gspread.exceptions.SpreadsheetNotFound:
-    logging.error("Spreadsheet not found. Check SPREADSHEET_KEY in .env file.")
-    raise
-except gspread.exceptions.WorksheetNotFound as e:
-    logging.error(
-        "Worksheet not found: %s. Make sure all worksheets (results, pr, log, AthletesList) exist.",
-        e,
-    )
-    raise
-except Exception as e:  # pragma: no cover - unexpected init errors
-    logging.error("An error occurred during Google Sheets initialization: %s", e)
-    raise
+@lru_cache(maxsize=1)
+def _get_gspread_client() -> gspread.Client:
+    """Return a cached gspread client configured via ``creds.json``."""
+
+    creds_path = _get_credentials_path()
+    if not creds_path.exists():
+        raise RuntimeError(
+            "Google credentials file 'creds.json' is required. Place the service account "
+            "JSON next to the application or update the path in services.base."
+        )
+    try:
+        return gspread.service_account(filename=str(creds_path))
+    except Exception as exc:  # pragma: no cover - depends on external file state
+        raise RuntimeError(
+            "Failed to load Google credentials from 'creds.json'. Verify that the file "
+            "contains a valid service account key."
+        ) from exc
+
+
+@lru_cache(maxsize=1)
+def get_spreadsheet() -> gspread.Spreadsheet:
+    """Open and cache the configured Google Spreadsheet."""
+
+    key = os.getenv("SPREADSHEET_KEY", "").strip()
+    if not key:
+        raise RuntimeError(
+            "SPREADSHEET_KEY environment variable must be set to access Google Sheets."
+        )
+    try:
+        client = _get_gspread_client()
+        return client.open_by_key(key)
+    except gspread.exceptions.SpreadsheetNotFound as exc:
+        raise RuntimeError(
+            f"Spreadsheet with key '{key}' was not found. Verify SPREADSHEET_KEY and "
+            "ensure the service account has access."
+        ) from exc
+    except (
+        gspread.exceptions.GSpreadException
+    ) as exc:  # pragma: no cover - network errors
+        raise RuntimeError(
+            "Unable to open the Google Spreadsheet. Check credentials and network access."
+        ) from exc
+
+
+@lru_cache(maxsize=None)
+def get_worksheet(name: str) -> gspread.Worksheet:
+    """Return a worksheet by name from the configured spreadsheet."""
+
+    try:
+        spreadsheet = get_spreadsheet()
+        return spreadsheet.worksheet(name)
+    except gspread.exceptions.WorksheetNotFound as exc:
+        raise RuntimeError(
+            f"Worksheet '{name}' was not found. Create it in the spreadsheet or update the "
+            "configuration."
+        ) from exc
+    except (
+        gspread.exceptions.GSpreadException
+    ) as exc:  # pragma: no cover - network errors
+        raise RuntimeError(
+            f"Unable to access worksheet '{name}'. Check spreadsheet availability."
+        ) from exc
+
+
+def get_results_worksheet() -> gspread.Worksheet:
+    """Return the worksheet that stores swim results."""
+
+    return get_worksheet("results")
+
+
+def get_pr_worksheet() -> gspread.Worksheet:
+    """Return the worksheet that stores personal records."""
+
+    return get_worksheet("pr")
+
+
+def get_log_worksheet() -> gspread.Worksheet:
+    """Return the worksheet used for action logging."""
+
+    return get_worksheet("log")
+
+
+def get_athletes_worksheet() -> gspread.Worksheet:
+    """Return the worksheet with the list of registered athletes."""
+
+    return get_worksheet("AthletesList")
+
 
 # --- Constants and Helpers ---
 ADMIN_IDS = (os.getenv("ADMIN_IDS") or "").split(",")
@@ -63,9 +132,17 @@ def get_all_sportsmen() -> list[str]:
     """Get a list of all sportsmen's names."""
 
     try:
+        worksheet = get_athletes_worksheet()
+    except RuntimeError as exc:
+        logging.error("Unable to access athletes worksheet: %s", exc)
+        return []
+
+    try:
         # Assuming names are in the second column (B) starting from the second row
-        return ws_athletes.col_values(2)[1:]
-    except Exception as e:  # pragma: no cover - relies on external service
+        return worksheet.col_values(2)[1:]
+    except (
+        gspread.exceptions.GSpreadException
+    ) as e:  # pragma: no cover - relies on external service
         logging.error("Failed to get sportsmen list from Google Sheets: %s", e)
         return []
 
@@ -74,8 +151,16 @@ def get_registered_athletes() -> list[tuple[int, str]]:
     """Return registered athletes as tuples of (telegram_id, name)."""
 
     try:
-        rows = ws_athletes.get_all_values()
-    except Exception as e:  # pragma: no cover - relies on external service
+        worksheet = get_athletes_worksheet()
+    except RuntimeError as exc:
+        logging.error("Unable to access athletes worksheet: %s", exc)
+        return []
+
+    try:
+        rows = worksheet.get_all_values()
+    except (
+        gspread.exceptions.GSpreadException
+    ) as e:  # pragma: no cover - relies on external service
         logging.error("Failed to fetch athletes: %s", e)
         return []
 

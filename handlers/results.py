@@ -10,7 +10,7 @@ from aiogram.filters import Command
 
 from i18n import t
 from role_service import RoleService
-from services import ws_pr, ws_results
+from services import get_pr_worksheet, get_results_worksheet
 from utils import fmt_time
 
 router = Router()
@@ -22,7 +22,11 @@ def _collect_best_totals(athlete_id: int) -> Dict[RecordKey, float]:
     """Return best total time per (stroke, distance)."""
 
     try:
-        rows = ws_results.get_all_values()
+        worksheet = get_results_worksheet()
+        rows = worksheet.get_all_values()
+    except RuntimeError as exc:
+        logging.error("Failed to access results worksheet: %s", exc, exc_info=True)
+        return {}
     except Exception as exc:  # pragma: no cover - network dependent
         logging.error("Failed to load results for totals: %s", exc, exc_info=True)
         return {}
@@ -55,7 +59,11 @@ def _collect_segment_bests(athlete_id: int) -> Dict[RecordKey, Dict[int, float]]
     """Return best segment times grouped by stroke and distance."""
 
     try:
-        rows = ws_pr.get_all_values()
+        worksheet = get_pr_worksheet()
+        rows = worksheet.get_all_values()
+    except RuntimeError as exc:
+        logging.error("Failed to access PR worksheet: %s", exc, exc_info=True)
+        return {}
     except Exception as exc:  # pragma: no cover - network dependent
         logging.error("Failed to load segment PRs: %s", exc, exc_info=True)
         return {}

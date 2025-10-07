@@ -23,30 +23,19 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from i18n import t
-from keyboards import (
-    CommentCB,
-    DistanceCB,
-    RepeatCB,
-    StrokeCB,
-    TemplateCB,
-    get_comment_prompt_keyboard,
-    get_distance_keyboard,
-    get_result_actions_keyboard,
-    get_stroke_keyboard,
-    get_template_keyboard,
-    pack_timestamp_for_callback,
-    unpack_timestamp_from_callback,
-)
-from menu_callbacks import (
-    CB_MENU_ADD_RESULT,
-    CB_MENU_HISTORY,
-    CB_MENU_RECORDS,
-    CB_MENU_STAYER,
-)
+from keyboards import (CommentCB, DistanceCB, RepeatCB, StrokeCB, TemplateCB,
+                       get_comment_prompt_keyboard, get_distance_keyboard,
+                       get_result_actions_keyboard, get_stroke_keyboard,
+                       get_template_keyboard, pack_timestamp_for_callback,
+                       unpack_timestamp_from_callback)
+from menu_callbacks import (CB_MENU_ADD_RESULT, CB_MENU_HISTORY,
+                            CB_MENU_RECORDS, CB_MENU_STAYER)
 from notifications import NotificationService
 from role_service import ROLE_ATHLETE, RoleService
-from services import ws_athletes, ws_log, ws_pr, ws_results
-from services.stats_service import SobStats, calc_segment_prs, calc_sob, calc_total_pr
+from services import (get_athletes_worksheet, get_log_worksheet,
+                      get_pr_worksheet, get_results_worksheet)
+from services.stats_service import (SobStats, calc_segment_prs, calc_sob,
+                                    calc_total_pr)
 from template_service import SprintTemplate, TemplateService
 from utils import AddResult, fmt_time, get_segments, pr_key, speed
 from utils.parse_time import parse_splits, parse_total, validate_splits
@@ -76,10 +65,34 @@ def _comment_to_html(comment: str) -> str:
     return html.escape(comment, quote=True)
 
 
+def _results_sheet():
+    """Return worksheet with sprint results."""
+
+    return get_results_worksheet()
+
+
+def _pr_sheet():
+    """Return worksheet with personal records."""
+
+    return get_pr_worksheet()
+
+
+def _log_sheet():
+    """Return worksheet for audit logging."""
+
+    return get_log_worksheet()
+
+
+def _athletes_sheet():
+    """Return worksheet with athlete records."""
+
+    return get_athletes_worksheet()
+
+
 def _find_result_row(athlete_id: int, timestamp: str) -> int:
     """Return worksheet row index for result with provided timestamp."""
 
-    rows = ws_results.get_all_values()
+    rows = _results_sheet().get_all_values()
     for idx, row in enumerate(rows, start=1):
         if len(row) < 5:
             continue
@@ -95,7 +108,7 @@ def _update_comment(athlete_id: int, timestamp: str, comment: str | None) -> Non
 
     normalized = _normalize_comment(comment)
     row_idx = _find_result_row(athlete_id, timestamp)
-    ws_results.update_cell(row_idx, COMMENT_COLUMN_INDEX, normalized)
+    _results_sheet().update_cell(row_idx, COMMENT_COLUMN_INDEX, normalized)
 
 
 def _sync_last_results(timestamp: str, comment: str) -> None:
@@ -151,7 +164,7 @@ def _load_best_total(athlete_id: int, stroke: str, dist: int) -> float | None:
     """Return previous best total time for athlete if available."""
 
     try:
-        rows = ws_results.get_all_values()
+        rows = _results_sheet().get_all_values()
     except Exception as exc:  # pragma: no cover - network dependent
         logging.warning("Failed to load previous totals: %s", exc, exc_info=True)
         return None
@@ -184,7 +197,10 @@ def _load_segment_bests(
     """Return stored best segment times and their worksheet rows."""
 
     try:
-        rows = ws_pr.get_all_values()
+        rows = _pr_sheet().get_all_values()
+    except RuntimeError as exc:
+        logging.warning("Failed to access PR worksheet: %s", exc, exc_info=True)
+        return [], {}
     except Exception as exc:  # pragma: no cover - network dependent
         logging.warning("Failed to load segment PRs: %s", exc, exc_info=True)
         return [], {}
@@ -252,7 +268,7 @@ def _persist_result(
         "sob_current": sob_stats.current,
     }
 
-    ws_results.append_row(
+    _results_sheet().append_row(
         [
             athlete_id,
             athlete_name,
@@ -264,7 +280,7 @@ def _persist_result(
             _normalize_comment(comment),
         ]
     )
-    ws_log.append_row([athlete_id, timestamp, "ADD", json.dumps(splits_list)])
+    _log_sheet().append_row([athlete_id, timestamp, "ADD", json.dumps(splits_list)])
 
     new_prs: list[tuple[int, float]] = []
     best_buffer = list(segment_bests)
@@ -276,12 +292,12 @@ def _persist_result(
         row_idx = segment_rows.get(idx)
         current_best = best_buffer[idx] if idx < len(best_buffer) else None
         if row_idx is None:
-            ws_pr.append_row([key, seg_time, timestamp])
+            _pr_sheet().append_row([key, seg_time, timestamp])
             new_prs.append((idx, seg_time))
             continue
         if current_best is not None and seg_time >= current_best:
             continue
-        ws_pr.update(f"A{row_idx}:C{row_idx}", [[key, seg_time, timestamp]])
+        _pr_sheet().update(f"A{row_idx}:C{row_idx}", [[key, seg_time, timestamp]])
         new_prs.append((idx, seg_time))
 
     return total, new_prs, timestamp, stats_payload
@@ -737,7 +753,9 @@ async def comment_edit(
         return
 
     try:
-        current_comment = ws_results.cell(row_idx, COMMENT_COLUMN_INDEX).value or ""
+        current_comment = (
+            _results_sheet().cell(row_idx, COMMENT_COLUMN_INDEX).value or ""
+        )
     except Exception as exc:
         logging.error("Failed to load comment: %s", exc, exc_info=True)
         await cb.answer("Не вдалося завантажити нотатку", show_alert=True)
@@ -833,7 +851,7 @@ async def cmd_results(message: types.Message) -> None:
     """Show latest results together with comments."""
 
     try:
-        rows = ws_results.get_all_values()
+        rows = _results_sheet().get_all_values()
     except Exception as exc:
         logging.error("Failed to load results: %s", exc, exc_info=True)
         await message.answer("Не вдалося завантажити результати. Спробуйте пізніше.")
@@ -882,7 +900,7 @@ async def history(cb: types.CallbackQuery) -> None:
     """Show history of results for user."""
 
     try:
-        rows = ws_results.get_all_values()[::-1]
+        rows = _results_sheet().get_all_values()[::-1]
         out = []
         processed_count = 0
         for row in rows:
@@ -938,7 +956,7 @@ async def history(cb: types.CallbackQuery) -> None:
 async def records(cb: types.CallbackQuery) -> None:
     """Display personal records."""
 
-    rows = ws_pr.get_all_values()
+    rows = _pr_sheet().get_all_values()
     best = {}
     for row in rows:
         try:
@@ -969,7 +987,7 @@ async def menu_sprint(
     """Show list of athletes for result entry."""
 
     try:
-        records = ws_athletes.get_all_records()
+        records = _athletes_sheet().get_all_records()
     except Exception as e:
         logging.error(f"Failed to get athletes list: {e}")
         return await cb.message.answer(
