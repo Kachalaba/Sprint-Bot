@@ -18,9 +18,19 @@ from menu_callbacks import (
     CB_MENU_ADMIN,
     CB_MENU_HISTORY,
     CB_MENU_INVITE,
+    CB_MENU_LEADERBOARD,
     CB_MENU_MESSAGES,
+    CB_MENU_MY_RECENT_PRS,
+    CB_MENU_NOOP,
+    CB_MENU_PROGRESS,
+    CB_MENU_QUICK_ADD_RESULT,
     CB_MENU_RECORDS,
+    CB_MENU_REPORTS,
+    CB_MENU_SETTINGS,
     CB_MENU_STAYER,
+    CB_MENU_TEAM_SUMMARY,
+    CB_MENU_TEMPLATES,
+    CB_MENU_TODAY_TRAINING,
 )
 from role_service import ROLE_ADMIN, ROLE_ATHLETE, ROLE_TRAINER
 
@@ -391,6 +401,221 @@ def wizard_navigation_row(back_target: str | None) -> list[InlineKeyboardButton]
         )
     buttons.append(wizard_cancel_button())
     return buttons
+
+
+def _chunk_buttons(
+    buttons: list[InlineKeyboardButton], columns: int = 2
+) -> list[list[InlineKeyboardButton]]:
+    """Split buttons into rows limited by the provided column count."""
+
+    return [
+        buttons[index : index + columns] for index in range(0, len(buttons), columns)
+    ]
+
+
+def _badge_text(base: str, count: int, badge_key: str) -> str:
+    """Return button text decorated with a localized badge when needed."""
+
+    if count <= 0:
+        return base
+    return t(badge_key, count=count, label=base)
+
+
+def build_contextual_greeting(user_name: str, time_of_day: str) -> str:
+    """Return personalized greeting adjusted for the part of the day."""
+
+    key = f"menu.greeting.{time_of_day}"
+    try:
+        return t(key, name=user_name)
+    except KeyError:
+        return t("menu.greeting.generic", name=user_name)
+
+
+def get_quick_actions_keyboard(user_id: int, role: str) -> InlineKeyboardMarkup:
+    """Build inline keyboard with quick access actions for a user role."""
+
+    del user_id  # The layout is role-based; concrete actions use callbacks.
+    quick_buttons: list[InlineKeyboardButton] = []
+
+    add_result_button = InlineKeyboardButton(
+        text=t("menu.quick_actions.add_result"),
+        callback_data=CB_MENU_QUICK_ADD_RESULT,
+    )
+    quick_buttons.append(add_result_button)
+
+    if role == ROLE_ATHLETE:
+        quick_buttons.append(
+            InlineKeyboardButton(
+                text=t("menu.quick_actions.recent_prs"),
+                callback_data=CB_MENU_MY_RECENT_PRS,
+            )
+        )
+    else:
+        quick_buttons.append(
+            InlineKeyboardButton(
+                text=t("menu.quick_actions.team_summary"),
+                callback_data=CB_MENU_TEAM_SUMMARY,
+            )
+        )
+
+    quick_buttons.append(
+        InlineKeyboardButton(
+            text=t("menu.quick_actions.today_training"),
+            callback_data=CB_MENU_TODAY_TRAINING,
+        )
+    )
+
+    rows = _chunk_buttons(quick_buttons, columns=2)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def build_modern_main_menu(
+    role: str, user_name: str = "", context_data: dict[str, object] | None = None
+) -> InlineKeyboardMarkup:
+    """Construct redesigned main menu keyboard with contextual badges."""
+
+    data = dict(context_data or {})
+    data.setdefault("user_name", user_name)
+    time_of_day = str(data.get("time_of_day", "day"))
+    unread_messages = int(data.get("unread_messages", 0) or 0)
+    pending_actions = int(data.get("pending_actions", 0) or 0)
+
+    history_button = InlineKeyboardButton(
+        text=t("menu.buttons.my_results"),
+        callback_data=CB_MENU_HISTORY,
+    )
+    progress_button = InlineKeyboardButton(
+        text=t("menu.buttons.my_progress"),
+        callback_data=CB_MENU_PROGRESS,
+    )
+    leaderboard_button = InlineKeyboardButton(
+        text=t("menu.buttons.leaderboard"),
+        callback_data=CB_MENU_LEADERBOARD,
+    )
+    settings_button = InlineKeyboardButton(
+        text=t("menu.buttons.settings"),
+        callback_data=CB_MENU_SETTINGS,
+    )
+
+    messages_text = _badge_text(
+        t("menu.buttons.messages"),
+        unread_messages,
+        "menu.buttons.messages_badge",
+    )
+    messages_button = InlineKeyboardButton(
+        text=messages_text,
+        callback_data=CB_MENU_MESSAGES,
+    )
+
+    add_result_text = _badge_text(
+        t("menu.buttons.add_result"),
+        pending_actions,
+        "menu.buttons.add_result_badge",
+    )
+    add_result_button = InlineKeyboardButton(
+        text=add_result_text,
+        callback_data=CB_MENU_ADD_RESULT,
+    )
+    templates_button = InlineKeyboardButton(
+        text=t("menu.buttons.templates"),
+        callback_data=CB_MENU_TEMPLATES,
+    )
+    reports_button = InlineKeyboardButton(
+        text=t("menu.buttons.reports"),
+        callback_data=CB_MENU_REPORTS,
+    )
+    search_button = InlineKeyboardButton(
+        text=t("menu.buttons.history"),
+        callback_data=CB_MENU_HISTORY,
+    )
+    invite_button = InlineKeyboardButton(
+        text=t("menu.buttons.invite"),
+        callback_data=CB_MENU_INVITE,
+    )
+
+    sections: list[list[InlineKeyboardButton]] = []
+
+    if role == ROLE_ATHLETE:
+        sections.append(
+            [
+                InlineKeyboardButton(
+                    text=t("menu.sections.athlete"), callback_data=CB_MENU_NOOP
+                )
+            ]
+        )
+        athlete_buttons = [
+            history_button,
+            progress_button,
+            leaderboard_button,
+            settings_button,
+        ]
+        if time_of_day == "evening":
+            athlete_buttons = [
+                progress_button,
+                history_button,
+                leaderboard_button,
+                settings_button,
+            ]
+        sections.extend(_chunk_buttons(athlete_buttons))
+    else:
+        sections.append(
+            [
+                InlineKeyboardButton(
+                    text=t("menu.sections.team"), callback_data=CB_MENU_NOOP
+                )
+            ]
+        )
+        coach_buttons = [
+            add_result_button,
+            templates_button,
+            reports_button,
+            search_button,
+        ]
+        if time_of_day == "morning":
+            coach_buttons = [
+                templates_button,
+                add_result_button,
+                reports_button,
+                search_button,
+            ]
+        sections.extend(_chunk_buttons(coach_buttons))
+
+        sections.append(
+            [
+                InlineKeyboardButton(
+                    text=t("menu.sections.community"), callback_data=CB_MENU_NOOP
+                )
+            ]
+        )
+        community_buttons = [messages_button, invite_button, leaderboard_button]
+        sections.extend(_chunk_buttons(community_buttons))
+
+    if role == ROLE_ADMIN:
+        sections.append(
+            [
+                InlineKeyboardButton(
+                    text=t("menu.sections.admin"), callback_data=CB_MENU_NOOP
+                )
+            ]
+        )
+        sections.extend(
+            _chunk_buttons(
+                [
+                    InlineKeyboardButton(
+                        text=t("menu.buttons.admin"),
+                        callback_data=CB_MENU_ADMIN,
+                    ),
+                    settings_button,
+                ]
+            )
+        )
+
+    if role == ROLE_ATHLETE:
+        sections.append(
+            _chunk_buttons([messages_button, settings_button], columns=2)[0]
+        )
+
+    return InlineKeyboardMarkup(inline_keyboard=sections)
 
 
 def get_result_actions_keyboard(
