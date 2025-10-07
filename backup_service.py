@@ -9,7 +9,7 @@ import shutil
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
 from aiogram import Bot
 
@@ -50,6 +50,7 @@ class BackupService:
         admin_chat_ids: Sequence[int] | None = None,
         storage_class: str | None = None,
         endpoint_url: str | None = None,
+        client_factory: Callable[[], BaseClient] | None = None,
     ) -> None:
         self.bot = bot
         self.db_path = Path(db_path)
@@ -60,6 +61,7 @@ class BackupService:
         self.storage_class = storage_class
         self.endpoint_url = endpoint_url or os.getenv("S3_ENDPOINT_URL")
         self._client: BaseClient | None = None
+        self._client_factory = client_factory
         self._task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
         self._available = boto3 is not None
@@ -270,8 +272,11 @@ class BackupService:
     def _get_client(self) -> BaseClient:
         self._ensure_available()
         if self._client is None:
-            session = boto3.session.Session()
-            self._client = session.client("s3", endpoint_url=self.endpoint_url)
+            if self._client_factory is not None:
+                self._client = self._client_factory()
+            else:
+                session = boto3.session.Session()
+                self._client = session.client("s3", endpoint_url=self.endpoint_url)
         return self._client
 
     @staticmethod
