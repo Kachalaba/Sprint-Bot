@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional
+
 import asyncio
 import sqlite3
 from collections import defaultdict
@@ -7,7 +7,9 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from statistics import fmean
-from typing import Iterable, Sequence
+from typing import Iterable, Optional, Sequence
+
+
 class TotalPRResult:
     """Information about overall personal record status."""
 
@@ -111,6 +113,36 @@ class WeeklyProgress:
         self.attempts = attempts
         self.pr_count = pr_count
         self.highlights = highlights
+
+
+class LatestResult:
+    """Describe the latest recorded sprint for an athlete."""
+
+    athlete_id: int
+    athlete_name: str
+    stroke: str
+    distance: int
+    total_seconds: float
+    timestamp: datetime
+    is_pr: bool
+
+    def __init__(
+        self,
+        athlete_id: int,
+        athlete_name: str,
+        stroke: str,
+        distance: int,
+        total_seconds: float,
+        timestamp: datetime,
+        is_pr: bool,
+    ) -> None:
+        self.athlete_id = athlete_id
+        self.athlete_name = athlete_name
+        self.stroke = stroke
+        self.distance = distance
+        self.total_seconds = total_seconds
+        self.timestamp = timestamp
+        self.is_pr = is_pr
 
 
 class TurnProgressResult:
@@ -233,6 +265,25 @@ class StatsService:
             highlights=tuple(highlights),
         )
 
+    async def latest_result(self, athlete_id: int) -> LatestResult | None:
+        """Return the most recent result for an athlete if available."""
+
+        row = await asyncio.to_thread(self._fetch_latest_result, athlete_id)
+        if row is None:
+            return None
+
+        timestamp_raw = row["timestamp"]
+        timestamp = self._parse_timestamp(timestamp_raw)
+        return LatestResult(
+            athlete_id=row["athlete_id"],
+            athlete_name=row["athlete_name"],
+            stroke=row["stroke"],
+            distance=int(row["distance"]),
+            total_seconds=float(row["total_seconds"]),
+            timestamp=timestamp,
+            is_pr=bool(row["is_pr"]),
+        )
+
     async def get_turn_analytics(self, athlete_id: int, stroke: str) -> dict:
         """Return chronological turn efficiency data for the athlete and stroke."""
 
@@ -290,6 +341,25 @@ class StatsService:
         with self._connect() as conn:
             conn.executescript(self._SETUP_SQL)
             conn.commit()
+
+    def _fetch_latest_result(self, athlete_id: int):
+        query = """
+            SELECT
+                athlete_id,
+                athlete_name,
+                stroke,
+                distance,
+                total_seconds,
+                timestamp,
+                is_pr
+            FROM results
+            WHERE athlete_id = ?
+            ORDER BY datetime(timestamp) DESC
+            LIMIT 1
+        """
+        with self._connect() as conn:
+            cursor = conn.execute(query, (athlete_id,))
+            return cursor.fetchone()
 
     @staticmethod
     def _period_start(period: StatsPeriod, *, now: datetime | None) -> datetime:
@@ -532,7 +602,9 @@ class StatsService:
             raise ValueError(f"invalid timestamp format: {text!r}") from exc
 
 
-def calc_total_pr(previous_best: Optional[float], current_total: float) -> TotalPRResult:
+def calc_total_pr(
+    previous_best: Optional[float], current_total: float
+) -> TotalPRResult:
     """Return total PR status comparing new total with the previous best."""
 
     is_new = previous_best is None or current_total < previous_best
