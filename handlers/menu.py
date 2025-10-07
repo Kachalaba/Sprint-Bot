@@ -16,6 +16,7 @@ from menu_callbacks import (
     CB_MENU_TEMPLATES,
 )
 from role_service import ROLE_ADMIN, ROLE_ATHLETE, ROLE_TRAINER, RoleService
+from services.stats_service import StatsService
 from utils.roles import require_roles
 
 router = Router()
@@ -134,11 +135,11 @@ async def menu_reports(cb: types.CallbackQuery) -> None:
 
 @router.callback_query(F.data == CB_MENU_PROGRESS)
 async def menu_progress_redirect(
-    cb: types.CallbackQuery, role_service: RoleService
+    cb: types.CallbackQuery, role_service: RoleService, stats_service: StatsService
 ) -> None:
     """Redirect progress menu button to the existing progress flow."""
 
     from handlers.progress import cmd_progress
 
-    await cmd_progress(cb.message, role_service)
+    await cmd_progress(cb.message, role_service, stats_service)
     await cb.answer()
