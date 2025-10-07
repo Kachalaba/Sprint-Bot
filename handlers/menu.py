@@ -17,7 +17,6 @@ from keyboards import (
     get_quick_actions_keyboard,
 )
 from menu_callbacks import (
-    CB_MENU_ADMIN,
     CB_MENU_MY_RECENT_PRS,
     CB_MENU_NOOP,
     CB_MENU_PROGRESS,
@@ -71,7 +70,11 @@ def build_menu_keyboard(role: str) -> types.InlineKeyboardMarkup:
         current_date="",
         current_time="",
     )
-    return build_modern_main_menu(role, user_name="", context_data=context.as_dict())
+    return build_modern_main_menu(
+        role,
+        user_name="",
+        context_data=context.as_dict(),
+    )
 
 
 def _classify_time_of_day(moment: datetime) -> str:
@@ -155,7 +158,11 @@ async def _send_menu(
 ) -> None:
     role = await _resolve_role(message, role_service, user_role)
     user_name = message.from_user.full_name
-    context = await _build_context_data(role, message.from_user.id, stats_service)
+    context = await _build_context_data(
+        role,
+        message.from_user.id,
+        stats_service,
+    )
 
     greeting = build_contextual_greeting(user_name, context.time_of_day)
 
@@ -227,7 +234,9 @@ async def menu_reports(cb: types.CallbackQuery) -> None:
 
 @router.callback_query(F.data == CB_MENU_PROGRESS)
 async def menu_progress_redirect(
-    cb: types.CallbackQuery, role_service: RoleService, stats_service: StatsService
+    cb: types.CallbackQuery,
+    role_service: RoleService,
+    stats_service: StatsService,
 ) -> None:
     """Redirect progress menu button to the existing progress flow."""
 
