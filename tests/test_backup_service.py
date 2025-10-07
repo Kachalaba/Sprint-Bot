@@ -301,7 +301,8 @@ def test_error_scenarios_raise_and_notify(
             await service._backup_loop()
 
         assert notifications
-        assert notifications[-1].startswith("❗️ Помилка резервного копіювання")
+        assert notifications[-1].startswith("❗️")
+        assert "Failed to upload backup to S3" in notifications[-1]
 
     _run(scenario())
 
