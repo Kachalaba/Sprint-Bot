@@ -14,7 +14,8 @@ from dotenv import load_dotenv
 
 # --- Environment setup ---
 load_dotenv()
-logging.basicConfig(level=logging.INFO)
+
+logger = logging.getLogger(__name__)
 
 # --- Bot Initialization ---
 
@@ -54,15 +55,22 @@ def _get_gspread_client() -> gspread.Client:
         ) from exc
 
 
-@lru_cache(maxsize=1)
-def get_spreadsheet() -> gspread.Spreadsheet:
-    """Open and cache the configured Google Spreadsheet."""
+def _get_spreadsheet_key() -> str:
+    """Return validated spreadsheet key from environment."""
 
     key = os.getenv("SPREADSHEET_KEY", "").strip()
     if not key:
         raise RuntimeError(
             "SPREADSHEET_KEY environment variable must be set to access Google Sheets."
         )
+    return key
+
+
+@lru_cache(maxsize=1)
+def get_spreadsheet() -> gspread.Spreadsheet:
+    """Open and cache the configured Google Spreadsheet."""
+
+    key = _get_spreadsheet_key()
     try:
         client = _get_gspread_client()
         return client.open_by_key(key)
@@ -134,7 +142,7 @@ def get_all_sportsmen() -> list[str]:
     try:
         worksheet = get_athletes_worksheet()
     except RuntimeError as exc:
-        logging.error("Unable to access athletes worksheet: %s", exc)
+        logger.error("Unable to access athletes worksheet: %s", exc)
         return []
 
     try:
@@ -143,7 +151,7 @@ def get_all_sportsmen() -> list[str]:
     except (
         gspread.exceptions.GSpreadException
     ) as e:  # pragma: no cover - relies on external service
-        logging.error("Failed to get sportsmen list from Google Sheets: %s", e)
+        logger.error("Failed to get sportsmen list from Google Sheets: %s", e)
         return []
 
 
@@ -153,7 +161,7 @@ def get_registered_athletes() -> list[tuple[int, str]]:
     try:
         worksheet = get_athletes_worksheet()
     except RuntimeError as exc:
-        logging.error("Unable to access athletes worksheet: %s", exc)
+        logger.error("Unable to access athletes worksheet: %s", exc)
         return []
 
     try:
@@ -161,7 +169,7 @@ def get_registered_athletes() -> list[tuple[int, str]]:
     except (
         gspread.exceptions.GSpreadException
     ) as e:  # pragma: no cover - relies on external service
-        logging.error("Failed to fetch athletes: %s", e)
+        logger.error("Failed to fetch athletes: %s", e)
         return []
 
     athletes: list[tuple[int, str]] = []
