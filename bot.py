@@ -218,7 +218,7 @@ async def main() -> None:
     from backup_service import BackupService
     from chat_service import DB_PATH, ChatService
     from middlewares.roles import RoleMiddleware
-    from notifications import NotificationService
+    from notifications import NotificationService, drain_queue
     from role_service import RoleService
     from services import ADMIN_IDS, TurnService, get_bot
     from services.audit_service import AuditService
