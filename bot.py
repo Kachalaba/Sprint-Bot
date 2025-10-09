@@ -17,7 +17,7 @@ from utils.sentry import init_sentry
 
 if TYPE_CHECKING:
     from backup_service import BackupService
-    from notifications import NotificationService, drain_queue
+    from notifications import NotificationService
     from services.turn_service import TurnService
 
 logger = get_logger(__name__)
@@ -281,6 +281,8 @@ async def main() -> None:
         queue_task.cancel()
         with suppress(asyncio.CancelledError):
             await queue_task
+        await bot.session.close()
+        get_bot.cache_clear()
 
 
 if __name__ == "__main__":
