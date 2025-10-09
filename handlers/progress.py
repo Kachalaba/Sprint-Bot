@@ -11,13 +11,11 @@ from typing import Iterable, Sequence
 import matplotlib
 from aiogram import F, Router, types
 from aiogram.filters import Command
-from aiogram.types import (BufferedInputFile, InlineKeyboardButton,
-                           InlineKeyboardMarkup)
+from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 
 from role_service import ROLE_ATHLETE, RoleService
 from services import get_athletes_worksheet, get_results_worksheet
-from services.stats_service import (StatsPeriod, StatsService,
-                                    TurnProgressResult)
+from services.stats_service import StatsPeriod, StatsService, TurnProgressResult
 from utils import fmt_time
 
 matplotlib.use("Agg")
@@ -176,21 +174,21 @@ def _build_progress_plot(
     ax.legend()
     fig.autofmt_xdate()
 
-    buf = io.BytesIO()
-    fig.tight_layout()
-    fig.savefig(buf, format="png", dpi=150)
-    plt.close(fig)
-    buf.seek(0)
-    return buf.getvalue()
+    return _figure_to_png(fig)
 
 
 def _figure_to_png(fig: plt.Figure) -> bytes:
     """Serialize matplotlib figure into PNG bytes."""
 
     buf = io.BytesIO()
-    fig.tight_layout()
-    fig.savefig(buf, format="png", dpi=150)
-    plt.close(fig)
+    try:
+        fig.tight_layout()
+        fig.savefig(buf, format="png", dpi=150)
+    except Exception as exc:  # pragma: no cover - matplotlib backend issues
+        logger.exception("Failed to render matplotlib figure: %s", exc)
+        raise RuntimeError("Failed to render matplotlib figure") from exc
+    finally:
+        plt.close(fig)
     buf.seek(0)
     return buf.getvalue()
 
@@ -414,14 +412,23 @@ async def _send_progress_report(
         "спортсмен",
     )
 
-    image_bytes = _build_progress_plot(distances, athlete_name)
+    try:
+        image_bytes = _build_progress_plot(distances, athlete_name)
+    except Exception as exc:  # pragma: no cover - plotting guard
+        logger.error("Failed to build progress plot: %s", exc, exc_info=True)
+        image_bytes = None
     table_text = _format_progress_table(distances)
 
     target = event.message if isinstance(event, types.CallbackQuery) else event
-    await target.answer_photo(
-        BufferedInputFile(image_bytes, filename=f"progress_{athlete_key}.png"),
-        caption=f"📈 Прогрес для {athlete_name}",
-    )
+    if image_bytes is not None:
+        await target.answer_photo(
+            BufferedInputFile(image_bytes, filename=f"progress_{athlete_key}.png"),
+            caption=f"📈 Прогрес для {athlete_name}",
+        )
+    else:
+        await target.answer(
+            "⚠️ Не вдалося побудувати графік прогресу. Нижче наведено таблицю з даними.",
+        )
     await target.answer(
         "<b>Динаміка за дистанціями</b>\n" + table_text,
         parse_mode="HTML",
@@ -621,7 +628,10 @@ async def cmd_turn_analysis(
         try:
             image = builder(sessions, athlete_name, stroke)
         except Exception as exc:  # pragma: no cover - plotting guard
-            logger.warning("Failed to render %s: %s", filename, exc)
+            logger.warning("Failed to render %s: %s", filename, exc, exc_info=True)
+            await message.answer(
+                f"⚠️ Не вдалося побудувати графік: {caption}. Спробуйте пізніше."
+            )
             continue
         if not image:
             continue

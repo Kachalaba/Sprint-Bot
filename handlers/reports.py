@@ -265,6 +265,12 @@ async def cmd_report_last(message: types.Message, role_service: RoleService) -> 
     except ValueError:
         await message.answer(build_report_error("empty_report"))
         return
+    except RuntimeError as exc:  # pragma: no cover - matplotlib backend issues
+        logging.error("Failed to generate sprint image report: %s", exc, exc_info=True)
+        await message.answer(
+            "⚠️ Failed to render the graphical report. Please try again later."
+        )
+        return
 
     file = BufferedInputFile(image_bytes, filename="report.png")
     await message.answer_photo(
