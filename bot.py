@@ -9,8 +9,9 @@ from time import perf_counter
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable
 
 from aiogram import BaseMiddleware, Bot, Dispatcher
-from aiogram.exceptions import TelegramRetryAfter
+from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter
 from aiogram.types import BotCommand, Message, TelegramObject
+from aiohttp import client_exceptions as aiohttp_exceptions
 
 from i18n import t
 from notifications import drain_queue
@@ -22,7 +23,31 @@ if TYPE_CHECKING:
     from notifications import NotificationService
     from services.turn_service import TurnService
 
+ClientConnectorError = aiohttp_exceptions.ClientConnectorError
+ServerDisconnectedError = aiohttp_exceptions.ServerDisconnectedError
+RequestTimeoutError = getattr(
+    aiohttp_exceptions,
+    "RequestTimeoutError",
+    getattr(
+        aiohttp_exceptions,
+        "ServerTimeoutError",
+        asyncio.TimeoutError,
+    ),
+)
+
 logger = get_logger(__name__)
+
+_POLLING_INITIAL_BACKOFF = 1.0
+_POLLING_MAX_BACKOFF = 60.0
+_POLLING_MAX_TRIES_BEFORE_WARNING = 10
+_POLLING_WARNING_SLEEP = 300.0
+
+_NETWORK_ERRORS = (
+    TelegramNetworkError,
+    ServerDisconnectedError,
+    RequestTimeoutError,
+    ClientConnectorError,
+)
 
 _SENTRY_ENABLED = init_sentry()
 if _SENTRY_ENABLED:
@@ -220,6 +245,42 @@ def setup_dispatcher(
     return dp
 
 
+async def _start_polling_with_retries(
+    dp: Dispatcher,
+    bot_instance: Bot,
+    **polling_kwargs: Any,
+) -> None:
+    attempt = 0
+    while True:
+        try:
+            await dp.start_polling(bot_instance, **polling_kwargs)
+            break
+        except asyncio.CancelledError:
+            raise
+        except _NETWORK_ERRORS:
+            attempt += 1
+            effective_attempt = min(attempt, _POLLING_MAX_TRIES_BEFORE_WARNING)
+            backoff_delay = min(
+                _POLLING_MAX_BACKOFF,
+                _POLLING_INITIAL_BACKOFF * 2 ** (effective_attempt - 1),
+            )
+            logger.exception(
+                "[SprintBot] polling interrupted by network error (attempt %s)",
+                attempt,
+            )
+            if attempt > _POLLING_MAX_TRIES_BEFORE_WARNING:
+                cooldown = min(_POLLING_WARNING_SLEEP, backoff_delay * 2)
+                logger.warning(
+                    "[SprintBot] exceeded %s polling retries; "
+                    "next attempt in %s seconds",
+                    _POLLING_MAX_TRIES_BEFORE_WARNING,
+                    cooldown,
+                )
+                await asyncio.sleep(cooldown)
+            else:
+                await asyncio.sleep(backoff_delay)
+
+
 async def main() -> None:
     """Start Sprint Bot."""
     logger.info("[SprintBot] starting…")
@@ -274,7 +335,8 @@ async def main() -> None:
         pass
     queue_task = asyncio.create_task(drain_queue(), name="notification-queue-drain")
     try:
-        await dp.start_polling(
+        await _start_polling_with_retries(
+            dp,
             bot,
             notifications=notification_service,
             chat_service=chat_service,
