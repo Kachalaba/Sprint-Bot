@@ -56,7 +56,9 @@ class RoleService:
         user_id = getattr(user, "id", None) or getattr(user, "user_id", None)
         if user_id is None:
             return
-        full_name = getattr(user, "full_name", None) or getattr(user, "first_name", "")
+        full_name = getattr(user, "full_name", None)
+        if not full_name:
+            full_name = getattr(user, "first_name", "")
         last_name = getattr(user, "last_name", None)
         if last_name:
             full_name = f"{full_name} {last_name}".strip()
@@ -64,7 +66,10 @@ class RoleService:
             self._upsert_user, int(user_id), full_name or "", default_role
         )
 
-    async def bulk_sync_athletes(self, records: Iterable[tuple[int, str]]) -> None:
+    async def bulk_sync_athletes(
+        self,
+        records: Iterable[tuple[int, str]],
+    ) -> None:
         """Synchronise athlete records from Google Sheets."""
 
         await asyncio.to_thread(self._bulk_sync_athletes, tuple(records))
@@ -105,7 +110,10 @@ class RoleService:
 
         return await asyncio.to_thread(self._athletes_for_trainer, trainer_id)
 
-    async def get_accessible_athletes(self, requester_id: int) -> Sequence[int]:
+    async def get_accessible_athletes(
+        self,
+        requester_id: int,
+    ) -> Sequence[int]:
         """Return athlete ids the requester is allowed to manage."""
 
         role = await self.get_role(requester_id)
@@ -114,7 +122,11 @@ class RoleService:
             return tuple(user.telegram_id for user in athletes)
         return (requester_id,)
 
-    async def can_access_athlete(self, requester_id: int, athlete_id: int) -> bool:
+    async def can_access_athlete(
+        self,
+        requester_id: int,
+        athlete_id: int,
+    ) -> bool:
         """Check if requester has permission to view athlete data."""
 
         if requester_id == athlete_id:
@@ -123,7 +135,8 @@ class RoleService:
         if role == ROLE_ADMIN:
             return True
         if role == ROLE_TRAINER:
-            return True
+            athletes = await self.athletes_for_trainer(requester_id)
+            return athlete_id in athletes
         trainers = await self.trainers_for_athlete(athlete_id)
         return requester_id in trainers
 
@@ -160,21 +173,27 @@ class RoleService:
                     """
                     INSERT INTO users (telegram_id, full_name, role)
                     VALUES (?, '', ?)
-                    ON CONFLICT(telegram_id) DO UPDATE SET role = excluded.role,
+                    ON CONFLICT(telegram_id) DO UPDATE
+                        SET role = excluded.role,
                         updated_at = CURRENT_TIMESTAMP
                     """,
                     (admin_id, ROLE_ADMIN),
                 )
             conn.commit()
 
-    def _upsert_user(self, user_id: int, full_name: str, default_role: str) -> None:
+    def _upsert_user(
+        self,
+        user_id: int,
+        full_name: str,
+        default_role: str,
+    ) -> None:
         with self._connect() as conn:
             conn.execute(
                 """
                 INSERT INTO users (telegram_id, full_name, role)
                 VALUES (?, ?, ?)
-                ON CONFLICT(telegram_id) DO UPDATE SET
-                    full_name = excluded.full_name,
+                ON CONFLICT(telegram_id) DO UPDATE
+                    SET full_name = excluded.full_name,
                     updated_at = CURRENT_TIMESTAMP
                 """,
                 (user_id, full_name, default_role),
@@ -190,8 +209,8 @@ class RoleService:
                     """
                     INSERT INTO users (telegram_id, full_name, role)
                     VALUES (?, ?, ?)
-                    ON CONFLICT(telegram_id) DO UPDATE SET
-                        full_name = excluded.full_name,
+                    ON CONFLICT(telegram_id) DO UPDATE
+                        SET full_name = excluded.full_name,
                         updated_at = CURRENT_TIMESTAMP
                     """,
                     (athlete_id, name, ROLE_ATHLETE),
@@ -204,9 +223,9 @@ class RoleService:
                 """
                 INSERT INTO users (telegram_id, full_name, role)
                 VALUES (?, '', ?)
-                ON CONFLICT(telegram_id) DO UPDATE SET
-                    role = excluded.role,
-                    updated_at = CURRENT_TIMESTAMP
+                    ON CONFLICT(telegram_id) DO UPDATE
+                        SET role = excluded.role,
+                        updated_at = CURRENT_TIMESTAMP
                 """,
                 (user_id, role),
             )
