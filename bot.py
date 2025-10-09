@@ -126,10 +126,14 @@ async def configure_bot_commands(bot_instance: Bot) -> None:
             )
             await bot_instance.set_my_commands(commands, language_code=language)
     except TelegramRetryAfter as exc:
-        logger.error(
-            "[config] FLOOD: commands were not updated, wait %s seconds",
-            exc.timeout,
-        )
+        wait_seconds = getattr(exc, "retry_after", getattr(exc, "timeout", None))
+        if wait_seconds is not None:
+            logger.error(
+                "[config] FLOOD: commands were not updated, wait %s seconds",
+                wait_seconds,
+            )
+        else:
+            logger.error("[config] FLOOD: commands were not updated")
         raise
 
 
