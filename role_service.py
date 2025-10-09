@@ -117,9 +117,11 @@ class RoleService:
         """Return athlete ids the requester is allowed to manage."""
 
         role = await self.get_role(requester_id)
-        if role in {ROLE_ADMIN, ROLE_TRAINER}:
+        if role == ROLE_ADMIN:
             athletes = await self.list_users(roles=(ROLE_ATHLETE,))
             return tuple(user.telegram_id for user in athletes)
+        if role == ROLE_TRAINER:
+            return tuple(await self.athletes_for_trainer(requester_id))
         return (requester_id,)
 
     async def can_access_athlete(

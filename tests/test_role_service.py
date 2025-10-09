@@ -29,3 +29,31 @@ def test_trainer_access_requires_assignment(tmp_path: Path) -> None:
         )
 
     asyncio.run(scenario())
+
+
+def test_get_accessible_athletes_for_trainer(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        db_path = tmp_path / "roles.db"
+        service = RoleService(db_path)
+        await service.init()
+
+        athlete_one = 100
+        athlete_two = 101
+        assigned_trainer = 200
+        other_trainer = 201
+        unassigned_trainer = 202
+
+        for athlete_id in (athlete_one, athlete_two):
+            await service.set_role(athlete_id, ROLE_ATHLETE)
+
+        for trainer_id in (assigned_trainer, other_trainer, unassigned_trainer):
+            await service.set_role(trainer_id, ROLE_TRAINER)
+
+        await service.set_trainer(athlete_one, assigned_trainer)
+        await service.set_trainer(athlete_two, other_trainer)
+
+        assert await service.get_accessible_athletes(assigned_trainer) == (athlete_one,)
+        assert await service.get_accessible_athletes(other_trainer) == (athlete_two,)
+        assert await service.get_accessible_athletes(unassigned_trainer) == ()
+
+    asyncio.run(scenario())

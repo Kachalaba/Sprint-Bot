@@ -11,13 +11,11 @@ from typing import Iterable, Sequence
 import matplotlib
 from aiogram import F, Router, types
 from aiogram.filters import Command
-from aiogram.types import (BufferedInputFile, InlineKeyboardButton,
-                           InlineKeyboardMarkup)
+from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 
-from role_service import ROLE_ATHLETE, RoleService
+from role_service import ROLE_ATHLETE, ROLE_TRAINER, RoleService
 from services import get_athletes_worksheet, get_results_worksheet
-from services.stats_service import (StatsPeriod, StatsService,
-                                    TurnProgressResult)
+from services.stats_service import StatsPeriod, StatsService, TurnProgressResult
 from utils import fmt_time
 
 matplotlib.use("Agg")
@@ -481,11 +479,12 @@ async def cmd_progress(
     accessible_ids = set(
         await role_service.get_accessible_athletes(message.from_user.id)
     )
+    restrict_to_assigned = role == ROLE_TRAINER
     filtered = [
         rec
         for rec in records
         if (athlete_id := _extract_athlete_id(rec)) is not None
-        and (not accessible_ids or athlete_id in accessible_ids)
+        and (not restrict_to_assigned or athlete_id in accessible_ids)
     ]
 
     await role_service.bulk_sync_athletes(
