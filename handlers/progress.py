@@ -11,13 +11,11 @@ from typing import Iterable, Sequence
 import matplotlib
 from aiogram import F, Router, types
 from aiogram.filters import Command
-from aiogram.types import (BufferedInputFile, InlineKeyboardButton,
-                           InlineKeyboardMarkup)
+from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 
-from role_service import ROLE_ATHLETE, RoleService
+from role_service import ROLE_ATHLETE, ROLE_TRAINER, RoleService
 from services import get_athletes_worksheet, get_results_worksheet
-from services.stats_service import (StatsPeriod, StatsService,
-                                    TurnProgressResult)
+from services.stats_service import StatsPeriod, StatsService, TurnProgressResult
 from utils import fmt_time
 
 matplotlib.use("Agg")

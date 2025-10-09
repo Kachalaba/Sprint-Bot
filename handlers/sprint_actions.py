@@ -23,19 +23,35 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from i18n import t
-from keyboards import (CommentCB, DistanceCB, RepeatCB, StrokeCB, TemplateCB,
-                       get_comment_prompt_keyboard, get_distance_keyboard,
-                       get_result_actions_keyboard, get_stroke_keyboard,
-                       get_template_keyboard, pack_timestamp_for_callback,
-                       unpack_timestamp_from_callback)
-from menu_callbacks import (CB_MENU_ADD_RESULT, CB_MENU_HISTORY,
-                            CB_MENU_RECORDS, CB_MENU_STAYER)
+from keyboards import (
+    CommentCB,
+    DistanceCB,
+    RepeatCB,
+    StrokeCB,
+    TemplateCB,
+    get_comment_prompt_keyboard,
+    get_distance_keyboard,
+    get_result_actions_keyboard,
+    get_stroke_keyboard,
+    get_template_keyboard,
+    pack_timestamp_for_callback,
+    unpack_timestamp_from_callback,
+)
+from menu_callbacks import (
+    CB_MENU_ADD_RESULT,
+    CB_MENU_HISTORY,
+    CB_MENU_RECORDS,
+    CB_MENU_STAYER,
+)
 from notifications import NotificationService
-from role_service import ROLE_ATHLETE, RoleService
-from services import (get_athletes_worksheet, get_log_worksheet,
-                      get_pr_worksheet, get_results_worksheet)
-from services.stats_service import (SobStats, calc_segment_prs, calc_sob,
-                                    calc_total_pr)
+from role_service import ROLE_ATHLETE, ROLE_TRAINER, RoleService
+from services import (
+    get_athletes_worksheet,
+    get_log_worksheet,
+    get_pr_worksheet,
+    get_results_worksheet,
+)
+from services.stats_service import SobStats, calc_segment_prs, calc_sob, calc_total_pr
 from template_service import SprintTemplate, TemplateService
 from utils import AddResult, fmt_time, get_segments, pr_key, speed
 from utils.parse_time import parse_splits, parse_total, validate_splits
