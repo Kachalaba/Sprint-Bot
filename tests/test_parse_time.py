@@ -21,6 +21,8 @@ from utils.parse_time import (
         ("01:05.30", 65.3),
         (" 1:05.30 ", 65.3),
         ("58", 58.0),
+        ("58,5", 58.5),
+        ("1:05,3", 65.3),
     ],
 )
 def test_parse_total_valid_formats(raw: str, expected: float) -> None:
@@ -38,8 +40,8 @@ def test_parse_total_invalid_formats(raw: str) -> None:
 
 
 def test_parse_splits_mixed_formats() -> None:
-    values = parse_splits(["0:30.00", 32.5, "32.50", 30])
-    assert values == [30.0, 32.5, 32.5, 30.0]
+    values = parse_splits(["0:30.00", 32.5, "32.50", "32,50", 30])
+    assert values == [30.0, 32.5, 32.5, 32.5, 30.0]
 
 
 @pytest.mark.parametrize(
