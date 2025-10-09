@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import io
+import logging
 from dataclasses import dataclass
 from typing import Sequence
 
 import matplotlib
 
-matplotlib.use("Agg")
-from matplotlib import pyplot as plt
+matplotlib.use("Agg")  # noqa: E402
+from matplotlib import pyplot as plt  # noqa: E402
 
-from i18n import t
-from utils import fmt_time, speed
+from i18n import t  # noqa: E402
+from utils import fmt_time, speed  # noqa: E402
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -193,9 +196,18 @@ def generate_image_report(payload: AttemptReport) -> bytes:
     fig.tight_layout(rect=(0, 0, 1, 0.94))
 
     buffer = io.BytesIO()
-    fig.savefig(
-        buffer, format="png", dpi=100, bbox_inches="tight", facecolor=_BACKGROUND_COLOR
-    )
-    plt.close(fig)
+    try:
+        fig.savefig(
+            buffer,
+            format="png",
+            dpi=100,
+            bbox_inches="tight",
+            facecolor=_BACKGROUND_COLOR,
+        )
+    except Exception as exc:  # pragma: no cover - matplotlib backend issues
+        logger.exception("Failed to render sprint image report: %s", exc)
+        raise RuntimeError("Failed to render sprint image report") from exc
+    finally:
+        plt.close(fig)
     buffer.seek(0)
     return buffer.getvalue()
