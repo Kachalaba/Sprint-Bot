@@ -1018,9 +1018,10 @@ async def menu_sprint(
         return
 
     accessible_ids = set(await role_service.get_accessible_athletes(cb.from_user.id))
+    restrict_to_assigned = role == ROLE_TRAINER
     buttons = []
     for athlete_id, athlete_name in parsed_records:
-        if accessible_ids and athlete_id not in accessible_ids:
+        if restrict_to_assigned and athlete_id not in accessible_ids:
             continue
         buttons.append(
             InlineKeyboardButton(

@@ -481,11 +481,12 @@ async def cmd_progress(
     accessible_ids = set(
         await role_service.get_accessible_athletes(message.from_user.id)
     )
+    restrict_to_assigned = role == ROLE_TRAINER
     filtered = [
         rec
         for rec in records
         if (athlete_id := _extract_athlete_id(rec)) is not None
-        and (not accessible_ids or athlete_id in accessible_ids)
+        and (not restrict_to_assigned or athlete_id in accessible_ids)
     ]
 
     await role_service.bulk_sync_athletes(
