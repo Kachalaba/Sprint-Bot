@@ -126,11 +126,10 @@ async def configure_bot_commands(bot_instance: Bot) -> None:
             )
             await bot_instance.set_my_commands(commands, language_code=language)
     except TelegramRetryAfter as exc:
-        logger.error(
+        logger.warning(
             "[config] FLOOD: commands were not updated, wait %s seconds",
             exc.timeout,
         )
-        raise
 
 
 def _parse_admin_chat_ids(admin_ids_source: Iterable[str]) -> tuple[int, ...]:
@@ -293,8 +292,9 @@ async def main() -> None:
         queue_task.cancel()
         with suppress(asyncio.CancelledError):
             await queue_task
-        await bot.session.close()
-        await bot.close()
+        with suppress(Exception):
+            await bot.close()
+            await bot.session.close()
 
 
 if __name__ == "__main__":
