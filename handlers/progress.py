@@ -23,6 +23,17 @@ import matplotlib.pyplot as plt  # noqa: E402  # isort:skip
 
 
 _SUPPORTED_TURN_STROKES = ("breaststroke", "butterfly")
+_SEGMENT_REQUIRED_STROKES = frozenset({"breaststroke", "butterfly"})
+_TURN_SEGMENT_FIELDS = (
+    "approach_time",
+    "wall_contact_time",
+    "push_off_time",
+    "underwater_time",
+)
+_TURN_SEGMENT_PROMPT = (
+    "Введіть час кожного етапу повороту через пробіл "
+    "(approach contact push_off underwater)."
+)
 _STROKE_ALIASES = {
     "breast": "breaststroke",
     "breaststroke": "breaststroke",
@@ -206,6 +217,15 @@ def _stroke_title(value: str) -> str:
     """Return human-readable stroke label for progress messages."""
 
     return _STROKE_TITLES.get(value, value.title())
+
+
+def _has_complete_turn_segments(rows: Sequence[dict]) -> bool:
+    """Return ``True`` when at least one turn has all segment timings."""
+
+    for row in rows:
+        if all(row.get(field) is not None for field in _TURN_SEGMENT_FIELDS):
+            return True
+    return False
 
 
 def _group_turn_sessions(rows: Sequence[dict]) -> list[dict]:
@@ -441,11 +461,18 @@ async def _send_progress_report(
         for stroke in _SUPPORTED_TURN_STROKES
     }
     turn_sections: list[str] = []
+    missing_turn_inputs: set[str] = set()
     for stroke, task in tasks.items():
         try:
             analytics = await task
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.warning("Failed to load turn analytics for %s: %s", stroke, exc)
+            continue
+        rows = analytics.get("rows", ())
+        if stroke in _SEGMENT_REQUIRED_STROKES and not _has_complete_turn_segments(
+            rows
+        ):
+            missing_turn_inputs.add(stroke)
             continue
         progress = analytics.get("progress", ())
         if not progress:
@@ -453,6 +480,17 @@ async def _send_progress_report(
         turn_sections.append(_format_turn_summary(stroke, progress))
     if turn_sections:
         await target.answer("\n\n".join(turn_sections), parse_mode="HTML")
+    if missing_turn_inputs:
+        strokes_list = ", ".join(
+            _stroke_title(stroke) for stroke in sorted(missing_turn_inputs)
+        )
+        await target.answer(
+            (
+                f"Для стилів {strokes_list} бракує даних по поворотах.\n"
+                f"{_TURN_SEGMENT_PROMPT}"
+            ),
+            parse_mode="HTML",
+        )
     if isinstance(event, types.CallbackQuery):
         await event.answer()
 
@@ -599,6 +637,15 @@ async def cmd_turn_analysis(
         await status_msg.edit_text("Не вдалося отримати дані аналізу поворотів.")
         return
     rows = analytics.get("rows", ())
+    if stroke in _SEGMENT_REQUIRED_STROKES and not _has_complete_turn_segments(rows):
+        await status_msg.edit_text(
+            (
+                "Для аналізу стилю "
+                f"{_stroke_title(stroke)} потрібні часи кожного етапу повороту.\n"
+                f"{_TURN_SEGMENT_PROMPT}"
+            )
+        )
+        return
     if not rows:
         await status_msg.edit_text("Поки немає поворотів для аналізу цього стилю.")
         return
