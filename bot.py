@@ -9,6 +9,7 @@ from time import perf_counter
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable
 
 from aiogram import BaseMiddleware, Bot, Dispatcher
+from aiogram.exceptions import TelegramRetryAfter
 from aiogram.types import BotCommand, Message, TelegramObject
 
 from i18n import t
@@ -114,15 +115,22 @@ async def configure_bot_commands(bot_instance: Bot) -> None:
     default_commands = list(
         _build_bot_commands(get_bot_command_translations(lang=_DEFAULT_LANGUAGE))
     )
-    await bot_instance.set_my_commands(default_commands)
+    try:
+        await bot_instance.set_my_commands(default_commands)
 
-    for language in SUPPORTED_LANGUAGES:
-        if language == _DEFAULT_LANGUAGE:
-            continue
-        commands = list(
-            _build_bot_commands(get_bot_command_translations(lang=language))
+        for language in SUPPORTED_LANGUAGES:
+            if language == _DEFAULT_LANGUAGE:
+                continue
+            commands = list(
+                _build_bot_commands(get_bot_command_translations(lang=language))
+            )
+            await bot_instance.set_my_commands(commands, language_code=language)
+    except TelegramRetryAfter as exc:
+        logger.error(
+            "[config] FLOOD: commands were not updated, wait %s seconds",
+            exc.timeout,
         )
-        await bot_instance.set_my_commands(commands, language_code=language)
+        raise
 
 
 def _parse_admin_chat_ids(admin_ids_source: Iterable[str]) -> tuple[int, ...]:
@@ -261,7 +269,10 @@ async def main() -> None:
     )
     dp = setup_dispatcher(notification_service, backup_service, turn_service)
     dp.update.middleware(RoleMiddleware(role_service))
-    await configure_bot_commands(bot)
+    try:
+        await configure_bot_commands(bot)
+    except TelegramRetryAfter:
+        pass
     queue_task = asyncio.create_task(drain_queue(), name="notification-queue-drain")
     try:
         await dp.start_polling(
@@ -282,6 +293,8 @@ async def main() -> None:
         queue_task.cancel()
         with suppress(asyncio.CancelledError):
             await queue_task
+        await bot.session.close()
+        await bot.close()
 
 
 if __name__ == "__main__":
