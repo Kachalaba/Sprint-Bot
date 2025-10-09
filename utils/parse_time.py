@@ -9,8 +9,8 @@ from typing import Iterable, Mapping, Sequence
 _TIME_RE = re.compile(
     r"""
     ^\s*
-    (?:(?P<minutes>\d+):(?P<seconds>\d{1,2})(?:\.(?P<fraction>\d{1,3}))?|
-       (?P<plain>\d+(?:\.\d+)?)
+    (?:(?P<minutes>\d+):(?P<seconds>\d{1,2})(?:[.,](?P<fraction>\d{1,3}))?|
+       (?P<plain>\d+(?:[.,]\d+)?)
     )
     \s*$
     """,
@@ -53,6 +53,7 @@ def parse_total(raw: str) -> float:
 
     plain = match.group("plain")
     if plain is not None:
+        plain = plain.replace(",", ".")
         value = float(plain)
     else:
         minutes = int(match.group("minutes"))
