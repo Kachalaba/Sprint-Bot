@@ -12,12 +12,13 @@ from aiogram import BaseMiddleware, Bot, Dispatcher
 from aiogram.types import BotCommand, Message, TelegramObject
 
 from i18n import t
+from notifications import drain_queue
 from utils.logger import get_logger
 from utils.sentry import init_sentry
 
 if TYPE_CHECKING:
     from backup_service import BackupService
-    from notifications import NotificationService, drain_queue
+    from notifications import NotificationService
     from services.turn_service import TurnService
 
 logger = get_logger(__name__)
