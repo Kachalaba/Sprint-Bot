@@ -58,6 +58,7 @@ KB_LANGUAGE_RU = "kb.language.ru"
 KB_SKIP = "kb.skip"
 KB_COMMENT_EDIT = "kb.comment.edit"
 KB_COMMENT_ADD = "kb.comment.add"
+KB_EXPORT_ANALYSIS = "kb.export_analysis"
 
 COMMON_BACK = "common.back"
 COMMON_CANCEL = "common.cancel"
@@ -167,6 +168,7 @@ def build_main_reply_keyboard() -> ReplyKeyboardMarkup:
                 KeyboardButton(text=t(KB_MY_RESULTS)),
                 KeyboardButton(text=t(KB_PERSONAL_RECORDS)),
             ],
+            [KeyboardButton(text=t(KB_EXPORT_ANALYSIS))],
         ],
         resize_keyboard=True,
     )
