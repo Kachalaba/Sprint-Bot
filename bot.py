@@ -198,7 +198,9 @@ def setup_dispatcher(
     from handlers.admin_history import router as admin_history_router
     from handlers.backup import router as backup_router
     from handlers.common import router as common_router
+    from handlers.compare import router as compare_router
     from handlers.error_handler import router as error_router
+    from handlers.export_analysis import router as export_analysis_router
     from handlers.export_import import router as export_import_router
     from handlers.leaderboard import router as leaderboard_router
     from handlers.menu import router as menu_router
@@ -227,9 +229,11 @@ def setup_dispatcher(
     dp.include_router(admin_router)
     dp.include_router(admin_history_router)
     dp.include_router(progress_router)
+    dp.include_router(compare_router)
     dp.include_router(leaderboard_router)
     dp.include_router(reports_router)
     dp.include_router(export_import_router)
+    dp.include_router(export_analysis_router)
     dp.include_router(search_router)
     dp.include_router(results_router)
     dp.include_router(sprint_router)
