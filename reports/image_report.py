@@ -15,7 +15,7 @@ from matplotlib import pyplot as plt  # noqa: E402
 
 from i18n import t  # noqa: E402
 from services.pb_service import get_latest_attempt  # noqa: E402
-from services.pb_service import SobResult, get_sob, get_total_pb_attempt
+from services.pb_service import get_sob, get_total_pb_attempt
 from utils import fmt_time, get_segments, speed  # noqa: E402
 
 logger = logging.getLogger(__name__)
