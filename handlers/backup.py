@@ -5,10 +5,11 @@ from __future__ import annotations
 from aiogram import Router, types
 from aiogram.filters import Command
 
-from backup_service import BackupService
+from backup_service import BackupDisabledError, BackupService
 from role_service import ROLE_ADMIN, RoleService
 
 router = Router()
+_DISABLED_MESSAGE = "ℹ️ Бекап отключён: S3 не налаштовано."
 
 
 @router.message(Command("backup_now"))
@@ -26,8 +27,15 @@ async def backup_now_handler(
         await message.answer("Команда доступна лише адміністраторам.")
         return
 
+    if not backup_service.is_enabled:
+        await message.answer(_DISABLED_MESSAGE)
+        return
+
     try:
         metadata = await backup_service.backup_now()
+    except BackupDisabledError:
+        await message.answer(_DISABLED_MESSAGE)
+        return
     except Exception as exc:  # pragma: no cover - network dependent
         await message.answer(f"❗️ Не вдалося створити резервну копію: {exc}")
         return
@@ -52,6 +60,10 @@ async def backup_status_handler(
         return
     if await role_service.get_role(message.from_user.id) != ROLE_ADMIN:
         await message.answer("Команда доступна лише адміністраторам.")
+        return
+
+    if not backup_service.is_enabled:
+        await message.answer(_DISABLED_MESSAGE)
         return
 
     try:
@@ -90,14 +102,26 @@ async def restore_backup_handler(
     key = message.get_args().strip()
     key = key or None
 
+    if not backup_service.is_enabled:
+        await message.answer(_DISABLED_MESSAGE)
+        return
+
     try:
         metadata = await backup_service.restore_backup(key=key)
     except LookupError as exc:
         await message.answer(f"❗️ {exc}")
         return
+    except BackupDisabledError:
+        await message.answer(_DISABLED_MESSAGE)
+        return
     except Exception as exc:  # pragma: no cover - network dependent
         await message.answer(f"❗️ Помилка відновлення: {exc}")
         return
 
-    text = "♻️ Відновлення завершено успішно.\n" f"Файл: <code>{metadata.key}</code>"
+    text = "\n".join(
+        [
+            "♻️ Відновлення завершено успішно.",
+            f"Файл: <code>{metadata.key}</code>",
+        ]
+    )
     await message.answer(text)
