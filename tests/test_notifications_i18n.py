@@ -9,7 +9,8 @@ import pytest
 
 from i18n import t
 from notifications import NotificationService, SprintReminderPlan
-from utils import fmt_time, speed
+from sprint_bot.domain.analytics import avg_speed
+from utils import fmt_time
 
 
 @dataclass
@@ -121,7 +122,11 @@ def test_broadcast_message_translated(
             distance=100,
             time=fmt_time(65.5),
         ),
-        t("note.result_speed", lang=lang, speed=f"{speed(100, 65.5):.2f}"),
+        t(
+            "note.result_speed",
+            lang=lang,
+            speed=f"{avg_speed([65.5], 100.0):.2f}",
+        ),
         t(
             "note.result_added",
             lang=lang,

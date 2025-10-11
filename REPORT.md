@@ -267,3 +267,54 @@ Sprint-Bot/
 ## Команды
 - `git status -sb`
 - `git diff --stat`
+# Step Report — Domain Analytics Consolidation
+
+## Карта репозитория
+- `sprint_bot/domain/` — чистые модели и аналитика (новый модуль `analytics.py` с формулами темпа/скоростей/SoB).
+- `handlers/` — Telegram-хэндлеры; `sprint_actions.py` и `add_result.py` используют аналитику при сохранении и выводе результатов.
+- `services/` — доменные сервисы (`stats_service`, `pb_service`) переиспользуют расчёты из доменного слоя.
+- `reports/` — генерация графиков и отчётов (`image_report.py`) выводит таблицы и графики на базе новых функций.
+- `notifications.py` — сервис уведомлений с подсчётом скоростей и PR.
+- `tests/` — pytest-юнит-тесты; добавлен модуль `test_analytics.py` с doctest-прогоном и edge-case'ами.
+
+## План / почему так
+1. **Выделить формулы в домен** — создать `domain/analytics.py` с нормализацией ввода, скоростями, темпом, SoB и детекторами PR.
+2. **Перевести потребителей** — обновить `stats_service`, `pb_service`, хэндлеры, уведомления и отчёты на новые функции, убрать ручные вычисления.
+3. **Покрыть тестами** — написать `tests/test_analytics.py`, прогонять doctest, обновить существующие тесты и документацию.
+4. **Вычистить дубли** — заменить вызовы `utils.speed`, синхронизировать i18n-тесты, зафиксировать изменения в CHANGELOG/REPORT.
+
+## Риски
+- **Регресс в подсчётах**: неправильная нормализация строковых/таймдельта-значений может исказить SoB и темп; покрыто doctest/pytest.
+- **Ошибки на нулевых дистанциях**: новые проверки валидности могут выбрасывать `ValueError`; добавлены guard'ы в хэндлерах и отчётах.
+- **Рост зависимости**: перенос формул в домен требует следить за циклическими импортами; использованы только чистые функции без сторонних ссылок.
+
+## Что сделано
+- Создан модуль `sprint_bot/domain/analytics.py` с нормализацией сплитов, скоростями, темпом, деградацией, SoB и детекторами PR (doctest).
+- `services/stats_service.py`, `services/pb_service.py`, `handlers/*`, `notifications.py`, `reports/image_report.py` переведены на новый API.
+- Добавлены и обновлены тесты (`tests/test_analytics.py`, i18n-пакеты), обновлены `CHANGELOG.md` и текущий отчёт.
+
+## Дифф
+```diff
++ sprint_bot/domain/analytics.py
+* handlers/add_result.py
+* handlers/sprint_actions.py
+* notifications.py
+* reports/image_report.py
+* services/pb_service.py
+* services/stats_service.py
+* tests/test_analytics.py
+* tests/test_add_result_i18n.py
+* tests/test_notifications_i18n.py
+```
+
+## Использованные команды
+- `isort .`
+- `black .`
+- `flake8`
+- `pip install -r requirements.txt`
+- `pytest -q`
+
+## Что дальше
+- Подключить аналитику в сервисы сравнения команд (`team_analytics_service`) и графики, унифицируя расчёт темпа/скоростей.
+- Добавить property-based тесты для SoB/PR, чтобы покрыть случайные комбинации сплитов и дистанций.
+- Перевести остальные отчёты и экспорт (`export_service`) на модуль `domain.analytics`.

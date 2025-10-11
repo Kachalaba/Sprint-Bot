@@ -16,7 +16,8 @@ from matplotlib import pyplot as plt  # noqa: E402
 from i18n import t  # noqa: E402
 from services.pb_service import get_latest_attempt  # noqa: E402
 from services.pb_service import get_sob, get_total_pb_attempt
-from utils import fmt_time, get_segments, speed  # noqa: E402
+from sprint_bot.domain.analytics import pace_per_100, segment_speeds  # noqa: E402
+from utils import fmt_time, get_segments  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,9 @@ class SegmentReportRow:
     def velocity(self) -> float:
         """Return segment speed in metres per second."""
 
-        return speed(self.distance, self.time)
+        if not self.distance:
+            return 0.0
+        return segment_speeds([self.time], self.distance)[0]
 
     @property
     def percent_to_best(self) -> float | None:
@@ -53,7 +56,7 @@ class SegmentReportRow:
 
         if not self.distance:
             return 0.0
-        return self.time / self.distance * 100
+        return pace_per_100([self.time], self.distance)[0]
 
 
 @dataclass(frozen=True)

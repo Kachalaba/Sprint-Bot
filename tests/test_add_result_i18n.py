@@ -2,7 +2,8 @@ import pytest
 
 from handlers.add_result import build_quick_prompt, build_quick_saved
 from i18n import reset_context_language, set_context_language, t
-from utils import fmt_time, speed
+from sprint_bot.domain.analytics import avg_speed
+from utils import fmt_time
 
 
 @pytest.mark.parametrize("lang", ["uk", "ru"])
@@ -20,7 +21,7 @@ def test_quick_add_prompts_and_summary_i18n(lang: str) -> None:
         expected_summary = t(
             "add.quick.saved",
             total=fmt_time(total),
-            speed=f"{speed(100, total):.2f}",
+            speed=f"{avg_speed([total], 100.0):.2f}",
         )
         assert summary == expected_summary
 

@@ -10,6 +10,10 @@
 - Introduced Postgres storage layer (SQLAlchemy models, repositories) and updated dependencies.
 - Added Alembic configuration and initial migration for Postgres schema.
 - Added migration tooling (`Makefile` targets) and batch import script from Sheets to Postgres.
+- Added `sprint_bot.domain.analytics` with canonical swim metrics and dedicated tests.
+
+### Changed
+- Reused domain analytics across handlers, reports and notifications to remove duplicated formulas and improve consistency.
 ### Fixed
 - Suppressed unused exception binding in Google Sheets storage to satisfy `ruff` static checks.
 

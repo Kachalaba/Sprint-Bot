@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from services.stats_service import SobStats, calc_sob
+from sprint_bot.domain.analytics import SobStats, calc_sob
 from utils.logger import get_logger
 
 logger = get_logger(__name__)

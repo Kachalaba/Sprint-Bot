@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from i18n import t
-from utils import fmt_time, speed
+from sprint_bot.domain.analytics import avg_speed
+from utils import fmt_time
 
 
 def build_quick_prompt(idx: int, length: float) -> str:
@@ -21,7 +22,7 @@ def build_quick_saved(dist: int, total: float) -> str:
     return t(
         "add.quick.saved",
         total=fmt_time(total),
-        speed=f"{speed(dist, total):.2f}",
+        speed=f"{avg_speed([total], float(dist)):.2f}",
     )
 
 
