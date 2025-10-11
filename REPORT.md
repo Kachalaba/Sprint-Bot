@@ -23,6 +23,50 @@
 
 ---
 
+# Step Report — Ruff Compliance Hotfix
+
+## Карта репозитория
+- `bot.py`, `handlers/`, `keyboards.py`, `filters/`, `middlewares/` — Telegram-бот на aiogram, хэндлеры команд, клавиатуры и фильтры.
+- `services/`, `notifications.py`, `template_service.py`, `reports/` — доменные и отчётные сервисы, генерация уведомлений.
+- `sprint_bot/` — модуль с выделенными слоями приложения (application ports, storage и инфраструктура).
+- `infra/`, `alembic/`, `db/`, `docker-compose.yml`, `Dockerfile` — инфраструктура: Postgres, Alembic, контейнеры, вспомогательные скрипты.
+- `scripts/`, `utils/`, `data/`, `tests/` — CLI-скрипты, утилиты, тестовые данные и автоматические тесты.
+
+## План / почему так
+1. Восстановить состояние после ревью: устранить замечание `ruff F841` в Google Sheets storage.
+2. Обновить документацию (CHANGELOG, REPORT) и зафиксировать команды для воспроизведения.
+3. Прогнать `ruff`, `pip install -r requirements.txt`, `pytest -q` для уверенности в стабильности.
+
+## Риски
+- Локальные правки в инфраструктурных файлах требуют аккуратности: нарушение совместимости storage может привести к деградации бота.
+- Возможные неожиданные обновления зависимостей при `pip install` — отслеживаем через lockfile и CI.
+
+## Что сделано
+- Удалил неиспользуемое связывание исключения в `GoogleSheetsStorage.get_worksheet`, чтобы `ruff` проходил без ошибок.
+- Обновил `CHANGELOG.md` и текущий отчёт, задокументировал команды для воспроизведения.
+
+## Дифф
+```diff
+diff --git a/sprint_bot/infrastructure/storage/google_sheets.py b/sprint_bot/infrastructure/storage/google_sheets.py
+@@
+-        except gspread.WorksheetNotFound as exc:
+-            logger.warning("Worksheet '%s' is missing in spreadsheet %s", name, spreadsheet.id)
+-            raise
++        except gspread.WorksheetNotFound:
++            logger.warning("Worksheet '%s' is missing in spreadsheet %s", name, spreadsheet.id)
++            raise
+```
+
+## Использованные команды
+- `ruff check .`
+- `pip install -r requirements.txt`
+- `pytest -q`
+
+## Что дальше
+- Подготовить следующий шаг миграции: покрытие Postgres storage интеграционными тестами и доработка импорта (по roadmap).
+
+---
+
 # Step Report — Architecture Skeleton
 
 ## Карта репозитория
@@ -53,3 +97,173 @@
 - Реализовать адаптеры `WorksheetService` и `AthleteRepository` поверх существующих сервисов.
 - Спроектировать первые use-cases (например, импорт результатов гонок).
 - Подготовить интеграцию с Sentry и объектным хранилищем в новых пакетах.
+
+# Step Report — Storage Migration Planning
+
+## Карта репозитория
+```
+Sprint-Bot/
+├── bot.py — текущая точка входа бота на aiogram 2.x с процедурной логикой.
+├── sprint_bot/ — новый модуль с DDD-скелетом (domain/application/infrastructure).
+│   ├── application/ — порты и use-case'ы следующего поколения.
+│   ├── domain/ — чистые модели атлетов, гонок, рекордов, SoB.
+│   └── infrastructure/ — адаптеры Telegram, storage, observability.
+├── handlers/, keyboards/, filters/, middlewares/ — legacy aiogram-хэндлеры и обвязка.
+├── services/, utils/, notifications.py, template_service.py — процедурные сервисы с обращениями к Google Sheets.
+├── db/ — SQL-миграции и скрипты для исторической БД.
+├── data/, reports/, examples/ — артефакты отчётности и дампы сплитов.
+├── docker-compose.yml, Dockerfile, entrypoint.sh — контейнеризация и запуск.
+├── tests/ — регрессионные тесты бота.
+└── docs: README.md, ARCH_PLAN.md, REPORT*.md, CHANGELOG.md — документация и планы.
+```
+
+## План работ
+1. Спроектировать слой `Storage` с конфигурируемым backend (`sheets`/`postgres`) и выделить контракты `AthletesRepo`, `CoachesRepo`, `ResultsRepo`, `RecordsRepo` в `application`.
+2. Реализовать адаптер Google Sheets на новом слое, постепенно оборачивая существующие сервисы.
+3. Подготовить модуль `infra/db` с SQLAlchemy 2.0 моделями, Alembic-конфигурацией и make-таргетом `make migrate`.
+4. Реализовать `PostgresStorage` и репозитории, покрыв основную доменную модель (атлеты, тренеры, результаты, рекорды).
+5. Написать idempotent-скрипт импорта данных из Sheets → Postgres (`make import_sheets`) с логом пропусков.
+6. Обновить docker-compose: запуск Postgres, прогон миграций при старте, конфиг через `.env`/`.env.example`.
+7. Прогнать тесты/линт, обновить документацию и инструкции по деплою.
+
+## Риски
+- **Сложность схемы**: несовпадение доменных сущностей с текущими таблицами в Sheets может привести к сложной миграции.
+- **Двойная запись**: при параллельной работе двух стораджей возможно расхождение данных; нужно обеспечить единый источник правды.
+- **Производительность миграции**: импорт сплитов большого объёма может превысить лимиты Google API; потребуется батчевание и ретраи.
+- **Совместимость legacy-кода**: существующие сервисы тесно связаны со структурами листов; рефакторинг может породить регрессии.
+
+## Что дальше
+- Провести ревизию сервисов, чтобы определить минимальный срез данных для первой версии Postgres.
+- Подготовить каркас конфигурации (`settings.py`, `.env.example`) для переключения backend.
+- Спроектировать схему таблиц и Alembic-миграции под целевые доменные объекты.
+
+## Диффы
+- `git diff --stat`: `CHANGELOG.md |  1 +`, `REPORT.md | 39 +`.
+
+## Команды
+- `git status -sb`
+- `git diff --stat`
+
+# Step Report — Alembic Migration Setup
+
+## Что сделано
+- Добавлены конфигурация `alembic.ini`, скрипт `env.py` и шаблон `script.py.mako`.
+- Сгенерирована стартовая миграция `20240507_0001_create_core_tables` с таблицами атлетов, тренеров, гонок, сплитов и рекордов.
+
+## Почему так
+- Alembic обеспечивает версионирование схемы и согласуется с SQLAlchemy моделями из `infra/db`.
+- Первая миграция отражает доменную модель, упрощая дальнейшее расширение.
+
+## Риски
+- Разделение default-значений между SQLAlchemy и БД требует синхронизации (особенно `updated_at`).
+- При запуске без `DB_URL` Alembic упадёт; нужна корректная настройка окружения.
+
+## Что дальше
+- Подготовить make-команды `migrate` и `import_sheets`.
+- Обновить docker-compose для запуска Postgres по умолчанию.
+
+## Диффы
+- `git diff --stat`: `alembic.ini`, `alembic/env.py`, `alembic/script.py.mako`, `alembic/versions/20240507_0001_create_core_tables.py` (новые файлы).
+
+## Команды
+- `git status -sb`
+# Step Report — Postgres Storage Foundations
+
+## Что сделано
+- Добавлен пакет `infra/db` с SQLAlchemy 2.0 моделями, сессиями и репозиториями для Postgres.
+- Реализован `PostgresStorage` на асинхронном движке, подключенный к фабрике `create_storage`.
+- В `requirements.txt` добавлены зависимости `SQLAlchemy`, `asyncpg`, `alembic`.
+
+## Почему так
+- SQLAlchemy 2.0 + `asyncpg` обеспечивает асинхронный доступ и совместимость с Alembic.
+- Слои репозиториев повторяют доменные контракты, что упрощает миграцию use-case'ов.
+
+## Риски
+- При загрузке больших гонок возможны дополнительные запросы из-за выборки сплитов; потребуется профилирование.
+- Upsert-логика через `merge`/`add` может конфликтовать с одновременными миграциями — нужно следить за блокировками.
+
+## Что дальше
+- Настроить Alembic и начальную миграцию схемы.
+- Подготовить docker-compose с Postgres и make-команды для миграций/импорта.
+
+## Диффы
+- `git diff --stat`: `requirements.txt | 3 +`, `sprint_bot/infrastructure/storage/postgres.py | 69 +/-`, `infra/db/*` (новые файлы).
+
+## Команды
+- `git status -sb`
+- `git diff --stat`
+# Step Report — Storage Layer Interfaces
+
+## Что сделано
+- Определены новые контракты `AthletesRepo`, `CoachesRepo`, `ResultsRepo`, `RecordsRepo` в приложении и вынесен фасад `Storage`.
+- Обновлён экспорт портов для использования единых абстракций стораджа в адаптерах.
+
+## Почему так
+- Единая точка монтирования репозиториев упростит переключение между Google Sheets и Postgres реализациями.
+- Переименование согласовано с roadmap и будущими use-case'ами (Results/Records vs Race/Performance).
+
+## Риски
+- Legacy-код пока не использует новые контракты, потребуется адаптация сервисов при интеграции.
+- Возможны расхождения с существующими DTO, если структура доменных сущностей изменится в процессе миграции.
+
+## Что дальше
+- Реализовать адаптер `GoogleSheetsStorage`, возвращающий репозитории поверх текущих сервисов.
+- Подготовить конфигурацию переключения backend через `.env` и фабрику стораджа.
+
+## Диффы
+- `git diff --stat`: `CHANGELOG.md |  1 +`, `REPORT.md | 24 +`, `sprint_bot/application/ports/__init__.py | 17 +/-`, `sprint_bot/application/ports/repositories.py |  8 +/-`.
+
+## Команды
+- `git status -sb`
+
+# Step Report — Tooling & Import Pipeline
+
+## Что сделано
+- Добавлен `Makefile` с командами `make migrate` и `make import_sheets`.
+- Реализован скрипт `scripts/import_sheets.py` для батч-миграции Sheets → Postgres (идемпотентно, с логами).
+- Обновлён `docker-compose.yml`: добавлен сервис Postgres, переменные `DB_URL`/`STORAGE_BACKEND`.
+- README пополнен инструкциями з міграцій.
+
+## Почему так
+- Makefile спрощує стандартні операції розробника та CI.
+- Скрипт використовує нові стораджі й централізований логгер із ротацією.
+- Docker Compose забезпечує холодний старт інфраструктури (Postgres + бот).
+
+## Риски
+- Імпорт поки тягне тільки активних атлетів/тренерів; для історичних архівів потрібне розширення API Sheets.
+- Ручний запуск скрипта без валідних облікових даних призведе до винятків — потрібно фіксувати в документації.
+
+## Что дальше
+- Покрити `scripts/import_sheets` тестами на моках Google Sheets.
+- Інтегрувати PostgresStorage у актуальні use-case'и бота.
+
+## Диффы
+- `git diff --stat`: `Makefile`, `scripts/import_sheets.py`, `docker-compose.yml`, `README.md`.
+
+## Команды
+- `git status -sb`
+# Step Report — Google Sheets Storage Backend
+
+## Что сделано
+- Реализован `GoogleSheetsStorage` с репозиториями для атлетов, тренеров, результатов и рекордов.
+- Добавлен конфиг стораджа (`StorageSettings`, `StorageBackend`) и фабрика `create_storage`.
+- Обновлён `.env.example` с переменными `STORAGE_BACKEND`, `DB_URL`, `GOOGLE_APPLICATION_CREDENTIALS`.
+
+## Почему так
+- Асинхронные обёртки (`asyncio.to_thread`) позволяют использовать существующие листы без блокировки event loop.
+- Упрощённые парсеры (дат, таймингов, булевых полей) покрывают большинство форматов, встреченных в таблицах.
+
+## Риски
+- Структура листов может отличаться от ожидаемой схемы; строки без обязательных полей пропускаются.
+- Репозиторий работает только на чтение — для записи в Sheets нужна отдельная реализация.
+
+## Что дальше
+- Реализовать `PostgresStorage` и SQLAlchemy модели.
+- Подготовить миграцию Alembic и docker-compose c Postgres.
+
+## Диффы
+- `git diff --stat`: `.env.example | 3 +`, `sprint_bot/infrastructure/storage/__init__.py | 35 +`, `config.py`, `google_sheets.py`, `postgres.py` (новые файлы).
+
+## Команды
+- `git status -sb`
+- `git diff --stat`

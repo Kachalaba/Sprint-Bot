@@ -1,11 +1,7 @@
 """Ports define the contracts between application layer and adapters."""
 
-from .repositories import (
-    AthleteRepository,
-    CoachRepository,
-    PerformanceRepository,
-    RaceRepository,
-)
+from .repositories import AthletesRepo, CoachesRepo, RecordsRepo, ResultsRepo
+from .storage import Storage
 from .services import (
     NotificationService,
     ObservabilityService,
@@ -14,10 +10,11 @@ from .services import (
 )
 
 __all__ = [
-    "AthleteRepository",
-    "CoachRepository",
-    "PerformanceRepository",
-    "RaceRepository",
+    "AthletesRepo",
+    "CoachesRepo",
+    "RecordsRepo",
+    "ResultsRepo",
+    "Storage",
     "NotificationService",
     "ObservabilityService",
     "StorageService",

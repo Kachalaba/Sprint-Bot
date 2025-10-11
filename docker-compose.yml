@@ -10,8 +10,29 @@ services:
       - sprint-bot-logs:/app/logs
     environment:
       BOT_TOKEN: ${BOT_TOKEN:?BOT_TOKEN must be set}
+      DB_URL: ${DB_URL:-postgresql+asyncpg://postgres:postgres@postgres:5432/sprint_bot}
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-sheets}
     restart: unless-stopped
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: sprint_bot
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - sprint-bot-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   sprint-bot-data:
   sprint-bot-logs:
+  sprint-bot-pgdata:
