@@ -26,6 +26,14 @@ except ImportError:  # pragma: no cover - optional dependency
 
 logger = logging.getLogger(__name__)
 
+_BOTO3_MISSING_WARNING = (
+    "boto3 is not installed; backup functionality is disabled until the "
+    "dependency is available"
+)
+_BACKUP_DISABLED_WARNING = "Backup disabled: S3 bucket is not configured"
+_RESTORE_SUCCESS_TEMPLATE = "♻️ Базу даних відновлено з архіву {key}."
+_SCHEDULE_ERROR_TEMPLATE = "❗️ Помилка резервного копіювання: {error}"
+
 
 @dataclass(frozen=True)
 class BackupMetadata:
@@ -34,6 +42,10 @@ class BackupMetadata:
     key: str
     size: int
     last_modified: datetime
+
+
+class BackupDisabledError(RuntimeError):
+    """Raised when backup features are disabled due to configuration issues."""
 
 
 class BackupService:
@@ -68,17 +80,15 @@ class BackupService:
 
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         if not self._available:
-            logger.warning(
-                "boto3 is not installed; backup functionality is disabled until the dependency is available"
-            )
+            logger.warning(_BOTO3_MISSING_WARNING)
 
     async def startup(self) -> None:
         """Launch the periodic backup task if configuration is provided."""
 
         if not self._available:
             return
-        if not self.bucket_name:
-            logger.warning("Backup service disabled: S3 bucket is not configured")
+        if not self.is_enabled:
+            logger.warning(_BACKUP_DISABLED_WARNING)
             return
 
         if self._task and not self._task.done():
@@ -110,8 +120,7 @@ class BackupService:
         """Create a new backup immediately and optionally notify admins."""
 
         self._ensure_available()
-        if not self.bucket_name:
-            raise RuntimeError("S3 bucket is not configured")
+        self._ensure_configured()
 
         async with self._lock:
             metadata = await asyncio.to_thread(self._upload_backup)
@@ -133,8 +142,7 @@ class BackupService:
         """Restore the latest or specified backup from cloud storage."""
 
         self._ensure_available()
-        if not self.bucket_name:
-            raise RuntimeError("S3 bucket is not configured")
+        self._ensure_configured()
 
         async with self._lock:
             if key is None:
@@ -149,11 +157,8 @@ class BackupService:
 
         logger.info("Backup %s restored from S3", target.key)
         if notify:
-            await self._notify_admins(
-                "♻️ Відновлення бази даних виконано успішно з архіву {key}.".format(
-                    key=target.key
-                )
-            )
+            message = _RESTORE_SUCCESS_TEMPLATE.format(key=target.key)
+            await self._notify_admins(message)
         return target
 
     async def list_backups(self, limit: int = 5) -> list[BackupMetadata]:
@@ -170,9 +175,8 @@ class BackupService:
                 await self.backup_now(notify=True)
             except Exception as exc:  # pragma: no cover - defensive
                 logger.exception("Scheduled backup failed: %s", exc)
-                await self._notify_admins(
-                    "❗️ Помилка резервного копіювання: {error}".format(error=exc)
-                )
+                error_message = _SCHEDULE_ERROR_TEMPLATE.format(error=exc)
+                await self._notify_admins(error_message)
             await asyncio.sleep(self.interval.total_seconds())
 
     def _upload_backup(self) -> BackupMetadata:
@@ -276,7 +280,10 @@ class BackupService:
                 self._client = self._client_factory()
             else:
                 session = boto3.session.Session()
-                self._client = session.client("s3", endpoint_url=self.endpoint_url)
+                self._client = session.client(
+                    "s3",
+                    endpoint_url=self.endpoint_url,
+                )
         return self._client
 
     @staticmethod
@@ -291,8 +298,19 @@ class BackupService:
     def _ensure_available(self) -> None:
         if not self._available or boto3 is None:
             raise RuntimeError(
-                "boto3 dependency is missing. Install boto3 to enable backup support."
+                "boto3 dependency is missing. Install boto3 to enable backup "
+                "support."
             )
 
+    def _ensure_configured(self) -> None:
+        if not self.bucket_name:
+            raise BackupDisabledError("Backup service is disabled")
 
-__all__ = ["BackupService", "BackupMetadata"]
+    @property
+    def is_enabled(self) -> bool:
+        """Return ``True`` when the backup service can operate."""
+
+        return self._available and bool(self.bucket_name)
+
+
+__all__ = ["BackupService", "BackupMetadata", "BackupDisabledError"]
