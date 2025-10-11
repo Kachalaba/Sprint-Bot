@@ -23,6 +23,50 @@
 
 ---
 
+# Step Report — Ruff Compliance Hotfix
+
+## Карта репозитория
+- `bot.py`, `handlers/`, `keyboards.py`, `filters/`, `middlewares/` — Telegram-бот на aiogram, хэндлеры команд, клавиатуры и фильтры.
+- `services/`, `notifications.py`, `template_service.py`, `reports/` — доменные и отчётные сервисы, генерация уведомлений.
+- `sprint_bot/` — модуль с выделенными слоями приложения (application ports, storage и инфраструктура).
+- `infra/`, `alembic/`, `db/`, `docker-compose.yml`, `Dockerfile` — инфраструктура: Postgres, Alembic, контейнеры, вспомогательные скрипты.
+- `scripts/`, `utils/`, `data/`, `tests/` — CLI-скрипты, утилиты, тестовые данные и автоматические тесты.
+
+## План / почему так
+1. Восстановить состояние после ревью: устранить замечание `ruff F841` в Google Sheets storage.
+2. Обновить документацию (CHANGELOG, REPORT) и зафиксировать команды для воспроизведения.
+3. Прогнать `ruff`, `pip install -r requirements.txt`, `pytest -q` для уверенности в стабильности.
+
+## Риски
+- Локальные правки в инфраструктурных файлах требуют аккуратности: нарушение совместимости storage может привести к деградации бота.
+- Возможные неожиданные обновления зависимостей при `pip install` — отслеживаем через lockfile и CI.
+
+## Что сделано
+- Удалил неиспользуемое связывание исключения в `GoogleSheetsStorage.get_worksheet`, чтобы `ruff` проходил без ошибок.
+- Обновил `CHANGELOG.md` и текущий отчёт, задокументировал команды для воспроизведения.
+
+## Дифф
+```diff
+diff --git a/sprint_bot/infrastructure/storage/google_sheets.py b/sprint_bot/infrastructure/storage/google_sheets.py
+@@
+-        except gspread.WorksheetNotFound as exc:
+-            logger.warning("Worksheet '%s' is missing in spreadsheet %s", name, spreadsheet.id)
+-            raise
++        except gspread.WorksheetNotFound:
++            logger.warning("Worksheet '%s' is missing in spreadsheet %s", name, spreadsheet.id)
++            raise
+```
+
+## Использованные команды
+- `ruff check .`
+- `pip install -r requirements.txt`
+- `pytest -q`
+
+## Что дальше
+- Подготовить следующий шаг миграции: покрытие Postgres storage интеграционными тестами и доработка импорта (по roadmap).
+
+---
+
 # Step Report — Architecture Skeleton
 
 ## Карта репозитория

@@ -198,7 +198,7 @@ class GoogleSheetsStorage(Storage):
         spreadsheet = self._require_spreadsheet()
         try:
             return await asyncio.to_thread(spreadsheet.worksheet, name)
-        except gspread.WorksheetNotFound as exc:
+        except gspread.WorksheetNotFound:
             logger.warning("Worksheet '%s' is missing in spreadsheet %s", name, spreadsheet.id)
             raise
 
