@@ -101,6 +101,13 @@ class CommentCB(CallbackData, prefix="comment"):
     athlete_id: int
 
 
+class AnalysisCB(CallbackData, prefix="analysis"):
+    """Callback factory for athlete analytics shortcuts."""
+
+    action: str
+    athlete_id: int
+
+
 class TurnDetailsCB(CallbackData, prefix="turn"):
     """Callback data for managing turn entry and analysis actions."""
 
@@ -646,6 +653,48 @@ def get_result_actions_keyboard(
             ],
         ]
     )
+
+
+def build_analysis_keyboard(athlete_id: int, is_admin: bool) -> InlineKeyboardMarkup:
+    """Build inline keyboard with athlete analytics shortcuts."""
+
+    primary_buttons = [
+        InlineKeyboardButton(
+            text=t("analysis.buttons.show_pb"),
+            callback_data=AnalysisCB(action="pb", athlete_id=athlete_id).pack(),
+        ),
+        InlineKeyboardButton(
+            text=t("analysis.buttons.show_sob"),
+            callback_data=AnalysisCB(action="sob", athlete_id=athlete_id).pack(),
+        ),
+        InlineKeyboardButton(
+            text=t("analysis.buttons.compare_team"),
+            callback_data=AnalysisCB(action="compare", athlete_id=athlete_id).pack(),
+        ),
+        InlineKeyboardButton(
+            text=t("analysis.buttons.export"),
+            callback_data=AnalysisCB(action="export", athlete_id=athlete_id).pack(),
+        ),
+    ]
+
+    rows = _chunk_buttons(primary_buttons, columns=2)
+
+    if is_admin:
+        admin_buttons = [
+            InlineKeyboardButton(
+                text=t("analysis.buttons.simulate"),
+                callback_data=AnalysisCB(
+                    action="simulate", athlete_id=athlete_id
+                ).pack(),
+            ),
+            InlineKeyboardButton(
+                text=t("analysis.buttons.admin_panel"),
+                callback_data=AnalysisCB(action="admin", athlete_id=athlete_id).pack(),
+            ),
+        ]
+        rows.append(admin_buttons)
+
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def turn_entry_keyboard(turn_count: int) -> InlineKeyboardMarkup:

@@ -22,6 +22,7 @@ from handlers.admin_browser import (
     render_progress_chart,
 )
 from i18n import t
+from keyboards import build_analysis_keyboard
 from menu_callbacks import CB_MENU_ADMIN
 from role_service import ROLE_ADMIN, ROLE_ATHLETE, ROLE_TRAINER, RoleService
 from services import get_registered_athletes
@@ -42,6 +43,7 @@ class AdminStates(StatesGroup):
     waiting_role_choice = State()
     waiting_athlete_id = State()
     waiting_trainer_choice = State()
+    waiting_analytics_id = State()
 
 
 _DEBUG_BADGE_KEY = "admin.debug.badge"
@@ -49,6 +51,7 @@ _DEBUG_MENU_CALLBACK = "admin:debug"
 _DEBUG_FORCE_SYNC_CALLBACK = "admin:debug:sync"
 _DEBUG_EXPORT_CALLBACK = "admin:debug:export"
 _DEBUG_SIMULATE_CALLBACK = "admin:debug:simulate"
+_ANALYTICS_MENU_CALLBACK = "admin:analytics"
 
 _QA_EXPORT_SERVICE = ExportService()
 
@@ -65,6 +68,11 @@ def _admin_keyboard() -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(
                     text="🤝 Тренер спортсмену", callback_data="admin:bind"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📊 Аналітика", callback_data=_ANALYTICS_MENU_CALLBACK
                 )
             ],
             [
@@ -134,7 +142,9 @@ async def _generate_full_export(role_service: RoleService) -> tuple[bytes, list[
     return payload, athlete_ids
 
 
-async def _send_summary(target: types.Message, summary) -> None:
+async def _send_summary(
+    target: types.Message, summary, *, is_admin: bool = False
+) -> None:
     """Render summary message and chart for provided admin snapshot."""
 
     history_text = build_history_table(summary.history)
@@ -143,7 +153,11 @@ async def _send_summary(target: types.Message, summary) -> None:
         f"{t(_DEBUG_BADGE_KEY)}\n<b>{summary.full_name}</b> (ID {summary.athlete_id})\n"
         f"{t('admin.browser.weekly_summary', attempts=summary.weekly_attempts, prs=summary.weekly_prs)}"
     )
-    await target.answer(f"{header}\n\n{pb_text}\n\n{history_text}", parse_mode="HTML")
+    await target.answer(
+        f"{header}\n\n{pb_text}\n\n{history_text}",
+        parse_mode="HTML",
+        reply_markup=build_analysis_keyboard(summary.athlete_id, is_admin),
+    )
     chart = render_progress_chart(group_history(summary.history))
     if chart:
         document = BufferedInputFile(
@@ -203,6 +217,45 @@ async def open_admin_panel(
         "Керуйте ролями користувачів та призначайте тренерів спортсменам.",
         reply_markup=_admin_keyboard(),
     )
+
+
+@router.callback_query(require_roles(ROLE_ADMIN), F.data == _ANALYTICS_MENU_CALLBACK)
+async def open_analytics_tools(cb: types.CallbackQuery, state: FSMContext) -> None:
+    """Prompt admin to choose athlete for analytics shortcuts."""
+
+    await state.set_state(AdminStates.waiting_analytics_id)
+    await _answer(cb, t("admin.analytics.prompt"))
+
+
+@router.message(AdminStates.waiting_analytics_id, require_roles(ROLE_ADMIN))
+async def process_analytics_id(
+    message: types.Message,
+    state: FSMContext,
+    role_service: RoleService,
+    stats_service: StatsService,
+    query_service: QueryService,
+) -> None:
+    """Handle athlete id input for analytics shortcuts."""
+
+    raw_value = (message.text or "").strip()
+    try:
+        athlete_id = int(raw_value)
+    except ValueError:
+        await message.answer(t("res.invalid_id"))
+        return
+
+    try:
+        summary = await get_admin_summary(
+            role_service, query_service, stats_service, athlete_id
+        )
+    except Exception as exc:  # pragma: no cover - external services
+        logger.error("Failed to load athlete summary: %s", exc, exc_info=True)
+        await message.answer(t("admin.analytics.failed"))
+        return
+    finally:
+        await state.clear()
+
+    await _send_summary(message, summary, is_admin=True)
 
 
 @router.callback_query(require_roles(ROLE_ADMIN), F.data == _DEBUG_MENU_CALLBACK)
@@ -321,7 +374,7 @@ async def admin_export_command(
     )
 
 
-@router.message(Command("admin_test"), require_roles(ROLE_ADMIN))
+@router.message(Command(("admin_test", "test_athlete")), require_roles(ROLE_ADMIN))
 async def admin_test_command(
     message: types.Message,
     role_service: RoleService,
@@ -352,7 +405,7 @@ async def admin_test_command(
     summary = await get_admin_summary(
         role_service, query_service, stats_service, athlete_id
     )
-    await _send_summary(message, summary)
+    await _send_summary(message, summary, is_admin=True)
 
 
 @router.message(Command("import_athletes"), require_roles(ROLE_ADMIN))

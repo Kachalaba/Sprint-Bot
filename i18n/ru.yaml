@@ -298,7 +298,7 @@ admin:
   debug:
     badge: "🧪 <b>Тестовый режим</b>"
     menu_title: "Выберите QA-инструмент:"
-    simulate_hint: "{badge}\nСимуляции доступны командой <code>/admin_test &lt;feature&gt; &lt;athlete_id&gt;</code>.\nНапример, <code>/admin_test browser 123456</code>."
+    simulate_hint: "{badge}\nСимуляции доступны командами <code>/admin_test &lt;feature&gt; &lt;athlete_id&gt;</code> или <code>/test_athlete &lt;feature&gt; &lt;athlete_id&gt;</code>.\nНапример, <code>/test_athlete browser 123456</code>."
   browser:
     select_prompt: "Выберите спортсмена для просмотра аналитики:"
     no_athletes: "Пока нет зарегистрированных спортсменов."
@@ -327,10 +327,13 @@ admin:
     export_caption: "{badge}\nЭкспорт содержит {count} спортсменов."
     export_preparing: "{badge}\nГотовлю файл для {count} спортсменов…"
     export_ready: "Готово. Данные для QA приложены."
-    test_usage: "{badge}\nИспользование: <code>/admin_test &lt;feature&gt; &lt;athlete_id&gt;</code>"
+    test_usage: "{badge}\nИспользование: <code>/admin_test &lt;feature&gt; &lt;athlete_id&gt;</code> или <code>/test_athlete &lt;feature&gt; &lt;athlete_id&gt;</code>"
     test_unknown: "Неизвестный режим '{feature}'. Доступно: browser, progress, history."
     import_empty: "{badge}\nНе удалось найти спортсменов для импорта."
     import_done: "{badge}\nИмпортировано {count} записей в базу."
+  analytics:
+    prompt: "Введите ID спортсмена, чтобы показать инструменты аналитики:"
+    failed: "Не удалось загрузить данные. Попробуйте позже."
 bot:
   start_welcome: "Привет! Это Sprint Bot. Используйте меню, чтобы начать работу."
   help: "Доступные команды:\n/start — запустить бота и открыть меню\n/menu — открыть главное меню\n/help — показать эту подсказку"
@@ -352,6 +355,33 @@ res:
     total: "• Общее время: {total}"
     sob: "• Sum of Best: {sob}"
     splits: "• Сегменты: {splits}"
+
+analysis:
+  buttons:
+    show_pb: "Показать PB"
+    show_sob: "Показать SoB"
+    compare_team: "Сравнить с командой"
+    export: "Экспорт PB/SoB"
+    simulate: "Симулировать спортсмена"
+    admin_panel: "Админ-панель"
+  messages:
+    pb_header: "<b>PB для {name}</b> (ID {id})"
+    pb_entry: "• {stroke} — {distance} м: {total}"
+    no_pb: "Пока нет зафиксированных PB."
+    sob_header: "<b>Σ лучших для {name}</b> (ID {id})"
+    sob_entry: "• {stroke} — {distance} м: {sob} (сплиты: {splits})"
+    no_sob: "Недостаточно данных для Sum of Best."
+    compare_header: "<b>Сравнение с командой — {name}</b> (ID {id})"
+    compare_entry: "• {stroke} — {distance} м: {athlete} против {team} ({delta})"
+    compare_better: "лучше на {delta}"
+    compare_slower: "медленнее на {delta}"
+    compare_equal: "на уровне команды"
+    compare_no_peers: "Нет командных данных для сравнения."
+    invalid_format: "Формат «{fmt}» не поддерживается. Используйте csv или xlsx."
+    simulate_hint: "🧪 Запустите <code>{command}</code>, чтобы симулировать функции для спортсмена."
+    admin_hint: "Откройте /admin, чтобы перейти к полной админ-панели."
+    unknown_action: "Неизвестное действие."
+
 report:
   title: "Спринт: {stroke} • {distance} м"
   col:
