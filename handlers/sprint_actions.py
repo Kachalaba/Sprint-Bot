@@ -52,8 +52,11 @@ from services import (
     get_results_worksheet,
 )
 from services.stats_service import SobStats, calc_segment_prs, calc_sob, calc_total_pr
+from sprint_bot.domain.analytics import avg_speed as calc_avg_speed
+from sprint_bot.domain.analytics import degradation_percent as calc_degradation
+from sprint_bot.domain.analytics import pace_per_100, segment_speeds
 from template_service import SprintTemplate, TemplateService
-from utils import AddResult, fmt_time, get_segments, pr_key, speed
+from utils import AddResult, fmt_time, get_segments, pr_key
 from utils.parse_time import parse_splits, parse_total, validate_splits
 
 from .add_result import build_quick_prompt, build_quick_saved
@@ -328,21 +331,39 @@ def _analysis_text(
     """Compose analysis block for the result."""
 
     seg_lens = [float(seg) for seg in (segments or get_segments(dist))]
-    speeds = [speed(seg, t) for seg, t in zip(seg_lens, splits)]
-    avg_speed = speed(dist, total)
-    pace = total / dist * 100 if dist else 0
-    degradation = (
-        (speeds[0] - speeds[-1]) / speeds[0] * 100
-        if len(speeds) > 1 and speeds[0]
-        else 0
+    splits_all = [float(value) for value in splits]
+    splits_sec = splits_all
+    if seg_lens and len(seg_lens) != len(splits_all):
+        limit = min(len(seg_lens), len(splits_all))
+        seg_lens = seg_lens[:limit]
+        splits_sec = splits_all[:limit]
+
+    speeds: tuple[float, ...]
+    degradation = 0.0
+    if splits_sec:
+        if seg_lens:
+            length_arg: float | list[float] = seg_lens
+        elif dist > 0:
+            inferred = float(dist) / len(splits_sec)
+            length_arg = [inferred] * len(splits_sec)
+        else:
+            length_arg = [1.0] * len(splits_sec)
+        speeds = segment_speeds(splits_sec, length_arg)
+        degradation = calc_degradation(splits_sec, length_arg)
+    else:
+        speeds = ()
+
+    average_speed = (
+        calc_avg_speed(splits_all, float(dist)) if dist > 0 and splits_all else 0.0
     )
+    pace = pace_per_100([total], float(dist))[0] if dist else 0.0
 
     segments_line = " • ".join(f"{v:.2f} м/с" for v in speeds)
 
     return (
         "📊 <b>Аналіз результату</b>\n"
         f"• Швидкості по сегментах: {segments_line}\n"
-        f"• Середня швидкість: {avg_speed:.2f} м/с\n"
+        f"• Середня швидкість: {average_speed:.2f} м/с\n"
         f"• Темп: {pace:.1f} сек/100 м\n"
         f"• Деградація темпу: {degradation:.1f}%"
     )
@@ -930,7 +951,9 @@ async def history(cb: types.CallbackQuery) -> None:
 
                     for i, t in enumerate(splits):
                         try:
-                            segment_speed = speed(get_segments(dist)[i], float(t))
+                            segment_speed = segment_speeds(
+                                [float(t)], get_segments(dist)[i]
+                            )[0]
                             out.append(
                                 f"  - Відрізок {i+1}: {fmt_time(float(t))} (швидкість: {segment_speed:.2f} м/с)"
                             )

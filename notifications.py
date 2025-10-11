@@ -11,7 +11,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from aiogram import Bot
 
 from i18n import t
-from utils import fmt_time, speed
+from sprint_bot.domain.analytics import avg_speed
+from utils import fmt_time
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -518,7 +519,7 @@ class NotificationService:
             t(
                 "note.result_speed",
                 lang=lang,
-                speed=f"{speed(dist, total):.2f}",
+                speed=f"{avg_speed([total], float(dist)):.2f}",
             ),
             t(
                 "note.result_added",
