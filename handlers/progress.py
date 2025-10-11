@@ -13,7 +13,8 @@ from aiogram import F, Router, types
 from aiogram.filters import Command
 from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 
-from role_service import ROLE_ATHLETE, ROLE_TRAINER, RoleService
+from keyboards import build_analysis_keyboard
+from role_service import ROLE_ADMIN, ROLE_ATHLETE, ROLE_TRAINER, RoleService
 from services import get_athletes_worksheet, get_results_worksheet
 from services.stats_service import StatsPeriod, StatsService, TurnProgressResult
 from utils import fmt_time
@@ -390,6 +391,7 @@ async def _send_progress_report(
     event: types.Message | types.CallbackQuery,
     athlete_id: int,
     stats_service: StatsService,
+    role_service: RoleService,
 ) -> None:
     """Render progress for athlete and send to requester."""
 
@@ -449,9 +451,20 @@ async def _send_progress_report(
         await target.answer(
             "⚠️ Не вдалося побудувати графік прогресу. Нижче наведено таблицю з даними.",
         )
+    requester = event.from_user if isinstance(event, types.Message) else event.from_user
+    is_admin = False
+    if requester is not None:
+        try:
+            requester_role = await role_service.get_role(requester.id)
+        except Exception as exc:  # pragma: no cover - defensive against storage issues
+            logger.warning("Failed to resolve requester role: %s", exc)
+            requester_role = None
+        is_admin = requester_role == ROLE_ADMIN
+
     await target.answer(
         "<b>Динаміка за дистанціями</b>\n" + table_text,
         parse_mode="HTML",
+        reply_markup=build_analysis_keyboard(athlete_id, is_admin),
     )
 
     tasks = {
@@ -504,7 +517,9 @@ async def cmd_progress(
     await role_service.upsert_user(message.from_user)
     role = await role_service.get_role(message.from_user.id)
     if role == ROLE_ATHLETE:
-        await _send_progress_report(message, message.from_user.id, stats_service)
+        await _send_progress_report(
+            message, message.from_user.id, stats_service, role_service
+        )
         return
 
     try:
@@ -576,7 +591,7 @@ async def show_progress(
         await cb.answer("Немає доступу до цього спортсмена.", show_alert=True)
         return
 
-    await _send_progress_report(cb, athlete_id, stats_service)
+    await _send_progress_report(cb, athlete_id, stats_service, role_service)
 
 
 def _parse_turn_command(message: types.Message) -> tuple[str | None, int | None]:
