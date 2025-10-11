@@ -7,7 +7,7 @@ from typing import Optional, Protocol, Sequence
 from sprint_bot.domain.models import Athlete, Coach, Race, SegmentPR, SoB
 
 
-class AthleteRepository(Protocol):
+class AthletesRepo(Protocol):
     """Provides access to athlete profiles."""
 
     async def get(self, athlete_id: str) -> Optional[Athlete]:
@@ -26,7 +26,7 @@ class AthleteRepository(Protocol):
         """Create or update an athlete record."""
 
 
-class CoachRepository(Protocol):
+class CoachesRepo(Protocol):
     """Provides access to coaching staff profiles."""
 
     async def get(self, coach_id: str) -> Optional[Coach]:
@@ -42,7 +42,7 @@ class CoachRepository(Protocol):
         """Persist the coach entity."""
 
 
-class RaceRepository(Protocol):
+class ResultsRepo(Protocol):
     """Persists races with nested split data."""
 
     async def get(self, race_id: str) -> Optional[Race]:
@@ -58,7 +58,7 @@ class RaceRepository(Protocol):
         """Persist race and underlying splits atomically."""
 
 
-class PerformanceRepository(Protocol):
+class RecordsRepo(Protocol):
     """Handles personal records and sum-of-bests aggregations."""
 
     async def list_segment_prs(self, athlete_id: str) -> Sequence[SegmentPR]:
