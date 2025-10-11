@@ -8,7 +8,7 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import fmean
-from typing import Sequence
+from typing import Any, Mapping, Sequence
 
 import matplotlib
 
@@ -59,7 +59,7 @@ class TeamAnalyticsService:
         stroke: str,
         distance: int,
         *,
-        profiles: Sequence[dict] | None = None,
+        profiles: Sequence[Mapping[str, Any]] | None = None,
         group: str | None = None,
         club: str | None = None,
     ) -> TeamComparison:
@@ -76,7 +76,7 @@ class TeamAnalyticsService:
     def _filter_athletes(
         self,
         athlete_ids: Sequence[int],
-        profiles: Sequence[dict] | None,
+        profiles: Sequence[Mapping[str, Any]] | None,
         group: str | None,
         club: str | None,
     ) -> list[int]:
@@ -85,7 +85,10 @@ class TeamAnalyticsService:
         allowed: set[int] = set()
         for profile in profiles:
             try:
-                aid = int(profile.get("athlete_id"))
+                value = profile.get("athlete_id")
+                if value is None:
+                    continue
+                aid = int(value)
             except (TypeError, ValueError):
                 continue
             if aid not in athlete_ids:
