@@ -24,7 +24,12 @@ from keyboards import AddWizardCB
 
 
 class DummyMessage:
-    def __init__(self, text: str = "", user_id: int = 42, chat_id: int = 24) -> None:
+    def __init__(
+        self,
+        text: str = "",
+        user_id: int = 42,
+        chat_id: int = 24,
+    ) -> None:
         self.text = text
         self.from_user = SimpleNamespace(id=user_id)
         self.chat = SimpleNamespace(id=chat_id)
@@ -79,7 +84,8 @@ def test_turn_state_triggered_for_breaststroke_template() -> None:
 
         splits_msg = DummyMessage("0:30 0:31 0:30 0:32")
         await input_splits(splits_msg, state)
-        assert await state.get_state() == AddWizardStates.enter_turn_details.state
+        current_state = await state.get_state()
+        assert current_state == AddWizardStates.enter_turn_details.state
         prompt = splits_msg.answer.await_args[0][0]
         expected_prompt = t("add.step.turns", count=3)
         assert prompt == expected_prompt
@@ -109,15 +115,20 @@ def test_input_turn_details_validation_flow() -> None:
 
         bad_format_msg = DummyMessage("oops")
         await input_turn_details(bad_format_msg, state)
-        assert bad_format_msg.answer.await_args[0][0] == t("error.invalid_time")
+        error_text = bad_format_msg.answer.await_args[0][0]
+        expected_prefix = t("add.error.invalid_value").format(value="oops")
+        format_hint = t("add.error.format_hint")
+        assert error_text == f"{expected_prefix}\n{format_hint}"
 
         mismatch_msg = DummyMessage("0:03")
         await input_turn_details(mismatch_msg, state)
-        assert await state.get_state() == AddWizardStates.enter_turn_details.state
+        current_state = await state.get_state()
+        assert current_state == AddWizardStates.enter_turn_details.state
 
         valid_msg = DummyMessage("0:03 0:04")
         await input_turn_details(valid_msg, state)
-        assert await state.get_state() == AddWizardStates.enter_total.state
+        current_state = await state.get_state()
+        assert current_state == AddWizardStates.enter_total.state
         total_prompt = valid_msg.answer.await_args[0][0]
         assert total_prompt == t("add.step.total")
 

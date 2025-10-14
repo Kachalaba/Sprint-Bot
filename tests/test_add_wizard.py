@@ -23,6 +23,7 @@ from handlers.add_wizard import (
     start_wizard,
 )
 from keyboards import AddWizardCB
+from i18n import t
 
 
 class DummyMessage:
@@ -169,6 +170,63 @@ def test_wizard_cancel() -> None:
         await cancel_wizard(cancel_cb, state)
         assert await state.get_state() is None
         cancel_cb.answer.assert_awaited()
-        start_msg.answer.assert_called_with("Майстер скасовано.")
+        start_msg.answer.assert_called_with(t("add.error.cancelled"))
+
+    asyncio.run(scenario())
+
+
+def test_wizard_cancel_command_from_user() -> None:
+    async def scenario() -> None:
+        state = _make_state()
+        carrier = DummyMessage()
+        await start_wizard(carrier, state)
+        await choose_style(
+            DummyCallback(carrier),
+            state,
+            AddWizardCB(action="style", value="freestyle"),
+        )
+        await choose_distance(
+            DummyCallback(carrier), state, AddWizardCB(action="distance", value="100")
+        )
+        await choose_template(
+            DummyCallback(carrier),
+            state,
+            AddWizardCB(action="template", value="25.0|25.0|25.0|25.0"),
+        )
+
+        cancel_msg = DummyMessage("/cancel")
+        await input_splits(cancel_msg, state)
+        assert await state.get_state() is None
+        cancel_msg.answer.assert_awaited()
+        assert cancel_msg.answer.await_args[0][0] == t("add.error.cancelled")
+
+    asyncio.run(scenario())
+
+
+def test_wizard_repeat_command_repeats_hint() -> None:
+    async def scenario() -> None:
+        state = _make_state()
+        carrier = DummyMessage()
+        await start_wizard(carrier, state)
+        await choose_style(
+            DummyCallback(carrier),
+            state,
+            AddWizardCB(action="style", value="freestyle"),
+        )
+        await choose_distance(
+            DummyCallback(carrier), state, AddWizardCB(action="distance", value="100")
+        )
+        await choose_template(
+            DummyCallback(carrier),
+            state,
+            AddWizardCB(action="template", value="25.0|25.0|25.0|25.0"),
+        )
+
+        repeat_msg = DummyMessage("/repeat")
+        await input_splits(repeat_msg, state)
+        assert await state.get_state() == AddWizardStates.enter_splits.state
+        assert repeat_msg.answer.await_count == 2
+        first_message = repeat_msg.answer.await_args_list[0][0][0]
+        assert first_message == t("add.error.repeat")
 
     asyncio.run(scenario())

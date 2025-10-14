@@ -45,11 +45,15 @@ def parse_total(raw: str) -> float:
 
     text = raw.strip()
     if not text:
-        raise ParseTimeError(ParseTimeErrorCode.INVALID_TIME)
+        raise ParseTimeError(
+            ParseTimeErrorCode.INVALID_TIME, context={"value": raw}
+        )
 
     match = _TIME_RE.match(text)
     if not match:
-        raise ParseTimeError(ParseTimeErrorCode.INVALID_TIME)
+        raise ParseTimeError(
+            ParseTimeErrorCode.INVALID_TIME, context={"value": raw}
+        )
 
     plain = match.group("plain")
     if plain is not None:
@@ -59,13 +63,17 @@ def parse_total(raw: str) -> float:
         minutes = int(match.group("minutes"))
         seconds = int(match.group("seconds"))
         if seconds >= 60:
-            raise ParseTimeError(ParseTimeErrorCode.INVALID_TIME)
+            raise ParseTimeError(
+                ParseTimeErrorCode.INVALID_TIME, context={"value": raw}
+            )
         fraction = match.group("fraction") or ""
         frac_value = int(fraction) / (10 ** len(fraction)) if fraction else 0.0
         value = minutes * 60 + seconds + frac_value
 
     if value < 0:
-        raise ParseTimeError(ParseTimeErrorCode.INVALID_TIME)
+        raise ParseTimeError(
+            ParseTimeErrorCode.INVALID_TIME, context={"value": raw}
+        )
 
     return value
 
@@ -80,10 +88,14 @@ def parse_splits(items: Sequence[str | float | int]) -> list[float]:
         elif isinstance(item, (int, float)):
             value = float(item)
         else:
-            raise ParseTimeError(ParseTimeErrorCode.INVALID_INPUT)
+            raise ParseTimeError(
+                ParseTimeErrorCode.INVALID_INPUT, context={"value": item}
+            )
 
         if value < 0:
-            raise ParseTimeError(ParseTimeErrorCode.INVALID_TIME)
+            raise ParseTimeError(
+                ParseTimeErrorCode.INVALID_TIME, context={"value": item}
+            )
         parsed.append(value)
 
     return parsed
@@ -93,13 +105,18 @@ def validate_splits(total: float, splits: Iterable[float], tol: float = 0.20) ->
     """Validate that the sum of splits matches the total within tolerance."""
 
     if tol < 0:
-        raise ParseTimeError(ParseTimeErrorCode.INVALID_INPUT)
+        raise ParseTimeError(ParseTimeErrorCode.INVALID_INPUT, context={"tol": tol})
     if total < 0:
-        raise ParseTimeError(ParseTimeErrorCode.INVALID_TIME)
+        raise ParseTimeError(
+            ParseTimeErrorCode.INVALID_TIME, context={"value": total}
+        )
 
     splits_list = list(splits)
     if any(value < 0 for value in splits_list):
-        raise ParseTimeError(ParseTimeErrorCode.INVALID_TIME)
+        raise ParseTimeError(
+            ParseTimeErrorCode.INVALID_TIME,
+            context={"value": next(value for value in splits_list if value < 0)},
+        )
 
     diff = abs(sum(splits_list) - total)
     if diff > tol:

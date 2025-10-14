@@ -35,9 +35,27 @@ def test_start_message_translates_between_languages() -> None:
 def test_help_message_translates_between_languages() -> None:
     uk_text = get_help_message(lang="uk")
     ru_text = get_help_message(lang="ru")
-    assert uk_text.splitlines()[0] == "Доступні команди:"
-    assert ru_text.splitlines()[0] == "Доступные команды:"
+    assert uk_text.splitlines()[0] == "<b>Як користуватися Sprint Bot</b>"
+    assert ru_text.splitlines()[0] == "<b>Как пользоваться Sprint Bot</b>"
     assert uk_text != ru_text
+    for section in (
+        "Введення результатів",
+        "Історія",
+        "Порівняння",
+        "Рекорди",
+        "Лідерборд",
+        "Експорт",
+    ):
+        assert f"<b>{section}</b>" in uk_text
+    for section in (
+        "Ввод результатов",
+        "История",
+        "Сравнение",
+        "Рекорды",
+        "Лидерборд",
+        "Экспорт",
+    ):
+        assert f"<b>{section}</b>" in ru_text
 
 
 def test_unknown_command_message_translates_between_languages() -> None:
