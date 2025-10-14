@@ -351,12 +351,32 @@ def get_onboarding_language_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def get_onboarding_skip_keyboard() -> InlineKeyboardMarkup:
-    """Inline keyboard allowing to skip optional step."""
+def get_onboarding_privacy_keyboard() -> InlineKeyboardMarkup:
+    """Return inline keyboard for privacy confirmation."""
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=t(KB_SKIP), callback_data="onboard_skip_group")]
+            [
+                InlineKeyboardButton(
+                    text=t("onb.btn.accept_privacy"),
+                    callback_data="onboard_privacy_accept",
+                ),
+                InlineKeyboardButton(
+                    text=t("onb.btn.decline_privacy"),
+                    callback_data="onboard_privacy_decline",
+                ),
+            ]
+        ]
+    )
+
+
+def get_onboarding_skip_keyboard(action: str = "group") -> InlineKeyboardMarkup:
+    """Inline keyboard allowing to skip optional step."""
+
+    callback_data = f"onboard_skip_{action}"
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=t(KB_SKIP), callback_data=callback_data)]
         ]
     )
 

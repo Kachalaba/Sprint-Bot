@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 from asyncio import QueueEmpty
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
+from time import monotonic
 from typing import Any, Iterable, Mapping, Sequence
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -29,6 +31,10 @@ class QueuedNotification:
 
 
 _DEFAULT_QUEUE_INTERVAL = 60.0
+_DEFAULT_DELIVERY_ATTEMPTS = 3
+_DEFAULT_BACKOFF_BASE = 1.5
+_TRAINER_THROTTLE_SECONDS = 20.0
+_TRAINER_DUPLICATE_TTL = 600.0
 
 
 def _parse_quiet_hours(value: str) -> tuple[time, time]:
@@ -145,32 +151,55 @@ async def send_notification(
 
 
 async def _deliver_notification(notification: QueuedNotification) -> None:
-    try:
-        await notification.bot.send_message(
-            chat_id=notification.chat_id,
-            text=notification.text,
-            **notification.kwargs,
-        )
-        logger.info(
-            "notification_delivered",
-            extra={
-                "user_id": notification.chat_id,
-                "cmd": "notification",
-                "latency_ms": None,
-            },
-        )
-    except Exception as exc:  # pragma: no cover - network dependent
-        logger.warning(
-            "Failed to deliver notification to %s: %s",
-            notification.chat_id,
-            exc,
-            exc_info=True,
-            extra={
-                "user_id": notification.chat_id,
-                "cmd": "notification",
-                "latency_ms": None,
-            },
-        )
+    delay = _DEFAULT_BACKOFF_BASE
+    for attempt in range(1, _DEFAULT_DELIVERY_ATTEMPTS + 1):
+        try:
+            await notification.bot.send_message(
+                chat_id=notification.chat_id,
+                text=notification.text,
+                **notification.kwargs,
+            )
+            logger.info(
+                "notification_delivered",
+                extra={
+                    "user_id": notification.chat_id,
+                    "cmd": "notification",
+                    "latency_ms": None,
+                    "attempt": attempt,
+                },
+            )
+            return
+        except Exception as exc:  # pragma: no cover - network dependent
+            if attempt == _DEFAULT_DELIVERY_ATTEMPTS:
+                logger.warning(
+                    "Failed to deliver notification to %s after %s attempts: %s",
+                    notification.chat_id,
+                    attempt,
+                    exc,
+                    exc_info=True,
+                    extra={
+                        "user_id": notification.chat_id,
+                        "cmd": "notification",
+                        "latency_ms": None,
+                        "attempt": attempt,
+                    },
+                )
+                return
+            logger.warning(
+                "Notification delivery to %s failed (attempt %s), retrying in %.1fs",
+                notification.chat_id,
+                attempt,
+                delay,
+                exc_info=True,
+                extra={
+                    "user_id": notification.chat_id,
+                    "cmd": "notification",
+                    "latency_ms": None,
+                    "attempt": attempt,
+                },
+            )
+            await asyncio.sleep(delay)
+            delay *= 2
 
 
 async def drain_queue(
@@ -221,6 +250,9 @@ class NotificationService:
         self._subscribers: set[int] = set()
         self._lock = asyncio.Lock()
         self._tasks: set[asyncio.Task] = set()
+        self._pending_deliveries: set[asyncio.Task] = set()
+        self._trainer_last_sent: dict[int, float] = {}
+        self._trainer_recent_messages: dict[int, dict[str, float]] = {}
 
     async def startup(self) -> None:
         """Launch background workers once dispatcher starts polling."""
@@ -249,6 +281,14 @@ class NotificationService:
                 await task
             except asyncio.CancelledError:
                 logger.debug("Cancelled task %s", task.get_name())
+
+        while self._pending_deliveries:
+            task = self._pending_deliveries.pop()
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                logger.debug("Cancelled delivery task %s", task.get_name())
 
         logger.info("Notification service stopped.")
 
@@ -350,20 +390,53 @@ class NotificationService:
             sob_current=stats.get("sob_current"),
         )
         for chat_id in target_ids:
-            try:
-                await send_notification(
-                    self.bot,
-                    chat_id,
-                    summary_text,
-                    parse_mode="HTML",
-                )
-            except Exception as exc:  # pragma: no cover - network dependent
-                logger.warning(
-                    "Failed to deliver PR notification to %s: %s",
-                    chat_id,
-                    exc,
-                    exc_info=True,
-                )
+            self._schedule_trainer_notification(chat_id, summary_text)
+
+    def _schedule_trainer_notification(self, chat_id: int, text: str) -> None:
+        self._cleanup_delivery_tasks()
+        task = asyncio.create_task(
+            self._deliver_trainer_notification(chat_id, text),
+            name=f"trainer-notify-{chat_id}",
+        )
+        task.add_done_callback(self._pending_deliveries.discard)
+        self._pending_deliveries.add(task)
+
+    async def _deliver_trainer_notification(self, chat_id: int, text: str) -> None:
+        delay, should_send = self._trainer_delivery_plan(chat_id, text)
+        if not should_send:
+            logger.debug(
+                "Suppressing duplicate trainer notification for chat %s", chat_id
+            )
+            return
+        if delay > 0:
+            await asyncio.sleep(delay)
+        try:
+            await send_notification(
+                self.bot,
+                chat_id,
+                text,
+                parse_mode="HTML",
+            )
+        finally:
+            self._trainer_last_sent[chat_id] = monotonic()
+
+    def _trainer_delivery_plan(self, chat_id: int, message: str) -> tuple[float, bool]:
+        now = monotonic()
+        recent = self._trainer_recent_messages.setdefault(chat_id, {})
+        cutoff = now - _TRAINER_DUPLICATE_TTL
+        for digest, timestamp in list(recent.items()):
+            if timestamp < cutoff:
+                del recent[digest]
+
+        digest = hashlib.sha256(message.encode("utf-8")).hexdigest()
+        if digest in recent:
+            return 0.0, False
+        recent[digest] = now
+
+        last_sent = self._trainer_last_sent.get(chat_id, 0.0)
+        delay = max(0.0, _TRAINER_THROTTLE_SECONDS - (now - last_sent))
+        self._trainer_last_sent[chat_id] = now + delay
+        return delay, True
 
     async def broadcast_text(
         self, text: str, *, exclude: Iterable[int] | None = None
@@ -418,6 +491,11 @@ class NotificationService:
 
     def _cleanup_finished_tasks(self) -> None:
         self._tasks = {task for task in self._tasks if not task.done()}
+
+    def _cleanup_delivery_tasks(self) -> None:
+        self._pending_deliveries = {
+            task for task in self._pending_deliveries if not task.done()
+        }
 
     async def _sprint_reminder_loop(self) -> None:
         """Background loop sending sprint reminders according to the plan."""

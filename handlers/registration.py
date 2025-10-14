@@ -2,31 +2,72 @@ from __future__ import annotations
 
 import logging
 import secrets
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from typing import Optional
 
 from aiogram import F, Router, types
-from aiogram.filters import CommandStart
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
 
-from handlers.menu import build_menu_keyboard
 from menu_callbacks import CB_MENU_INVITE
-from role_service import ROLE_ATHLETE, ROLE_TRAINER, RoleService
-from services import get_athletes_worksheet, get_bot
+from role_service import ROLE_TRAINER, RoleService
+from services import get_bot
 from utils.roles import require_roles
 
 logger = logging.getLogger(__name__)
 
 router = Router()
 
-# In-memory storage for invite codes
 active_invites: dict[str, int] = {}
 
 
-class RegStates(StatesGroup):
-    """FSM states for athlete registration."""
+@dataclass(frozen=True)
+class InviteInfo:
+    """Resolved invite payload linking athlete to trainer."""
 
-    waiting_for_name = State()
+    code: str
+    trainer_id: int
+
+
+def _generate_invite_code() -> str:
+    """Return a short random token used in deep links."""
+
+    return secrets.token_hex(4)
+
+
+def _normalise_payload(raw: str | None) -> Optional[str]:
+    if not raw:
+        return None
+    payload = raw.strip()
+    if not payload:
+        return None
+    if "_" not in payload:
+        return None
+    prefix, token = payload.split("_", 1)
+    if prefix.casefold() not in {"reg", "рег"}:
+        return None
+    token = token.strip()
+    if not token:
+        return None
+    return token
+
+
+def resolve_invite(payload: str | None) -> InviteInfo | None:
+    """Return invite info for payload if the code is active."""
+
+    token = _normalise_payload(payload)
+    if not token:
+        return None
+    trainer_id = active_invites.get(token)
+    if not trainer_id:
+        return None
+    return InviteInfo(code=token, trainer_id=trainer_id)
+
+
+def consume_invite(code: str | None) -> None:
+    """Remove invite code from active registry."""
+
+    if not code:
+        return
+    active_invites.pop(code, None)
 
 
 @router.callback_query(require_roles(ROLE_TRAINER), F.data == CB_MENU_INVITE)
@@ -34,7 +75,7 @@ async def send_invite(cb: types.CallbackQuery, role_service: RoleService) -> Non
     """Generate one-time invite link for a coach."""
 
     await role_service.upsert_user(cb.from_user, default_role=ROLE_TRAINER)
-    code = secrets.token_hex(4)
+    code = _generate_invite_code()
     active_invites[code] = cb.from_user.id
     bot = get_bot()
     me = await bot.get_me()
@@ -42,67 +83,3 @@ async def send_invite(cb: types.CallbackQuery, role_service: RoleService) -> Non
 
     await cb.message.answer(f"Надішліть спортсмену це посилання:\n{link}")
     await cb.answer()
-
-
-@router.message(CommandStart(deep_link=True))
-async def start_with_code(
-    message: types.Message,
-    command: CommandStart.CommandObject,
-    state: FSMContext,
-    role_service: RoleService,
-) -> None:  # type: ignore[attr-defined]
-    """Handle /start with invite code."""
-    args = command.args
-    if not args or not args.startswith("\u0440\u0435\u0433_"):
-        return
-
-    code = args.split("_", 1)[1]
-    if code not in active_invites:
-        await message.answer("Це посилання більше не дійсне.")
-        return
-
-    await state.set_state(RegStates.waiting_for_name)
-    await state.update_data(code=code, trainer_id=active_invites.get(code))
-    await message.answer("Вітаємо! Введіть ваше ім'я та прізвище.")
-
-
-@router.message(RegStates.waiting_for_name)
-async def process_name(
-    message: types.Message, state: FSMContext, role_service: RoleService
-) -> None:
-    """Save athlete name and finish registration."""
-    data = await state.get_data()
-    code = data.get("code")
-    name = message.text or ""
-    try:
-        worksheet = get_athletes_worksheet()
-    except RuntimeError as exc:
-        logger.error("Failed to access athletes worksheet: %s", exc)
-        await message.answer(
-            "Не вдалося отримати доступ до таблиці спортсменів. Спробуйте пізніше."
-        )
-        return
-
-    try:
-        worksheet.append_row(
-            [
-                message.from_user.id,
-                name,
-                datetime.now(timezone.utc).isoformat(" ", "seconds"),
-            ]
-        )
-    except Exception as e:
-        logger.error(f"Failed to add athlete: {e}")
-        await message.answer("Сталася помилка при збереженні. Спробуйте пізніше.")
-        return
-
-    active_invites.pop(code, None)
-    trainer_id = data.get("trainer_id")
-    await role_service.upsert_user(message.from_user, default_role=ROLE_ATHLETE)
-    await role_service.set_role(message.from_user.id, ROLE_ATHLETE)
-    if trainer_id:
-        await role_service.set_trainer(message.from_user.id, int(trainer_id))
-    await state.clear()
-    await message.answer(
-        f"✅ {name} зареєстрований!", reply_markup=build_menu_keyboard(ROLE_ATHLETE)
-    )

@@ -99,3 +99,50 @@ def test_notifications_queue_and_drain(monkeypatch: pytest.MonkeyPatch) -> None:
                 await drain_task
 
     asyncio.run(scenario())
+
+
+def test_trainer_notifications_throttle(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def scenario() -> None:
+        monkeypatch.setattr(notifications, "_TRAINER_THROTTLE_SECONDS", 0.02)
+        monkeypatch.setattr(notifications, "_TRAINER_DUPLICATE_TTL", 10.0)
+
+        bot = DummyBot()
+        service = notifications.NotificationService(bot)
+
+        base_kwargs = dict(
+            actor_id=222,
+            actor_name="Coach",
+            athlete_id=222,
+            athlete_name="Athlete",
+            dist=100,
+            stroke="freestyle",
+            total=65.0,
+            timestamp="2024-01-01 10:00",
+            stats={"new_total_pr": True, "total_pr_delta": 1.23, "sob_delta": 0.0},
+            trainers=[111],
+            new_prs=[(50, 30.0)],
+        )
+        second_kwargs = dict(
+            base_kwargs,
+            total=64.5,
+            stats={"new_total_pr": True, "total_pr_delta": 0.5, "sob_delta": 0.0},
+        )
+
+        await service.notify_new_result(**base_kwargs)
+        await asyncio.sleep(0.01)
+        assert [item[0] for item in bot.sent] == [111]
+
+        await service.notify_new_result(**second_kwargs)
+        await asyncio.sleep(0.005)
+        assert len(bot.sent) == 1  # throttled
+
+        await asyncio.sleep(0.05)
+        assert len(bot.sent) == 2
+
+        await service.notify_new_result(**second_kwargs)
+        await asyncio.sleep(0.05)
+        assert len(bot.sent) == 2  # duplicate suppressed
+
+        await service.shutdown()
+
+    asyncio.run(scenario())

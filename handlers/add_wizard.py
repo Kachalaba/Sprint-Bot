@@ -12,7 +12,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from i18n import t
 from keyboards import AddWizardCB, wizard_cancel_button, wizard_navigation_row
 from utils import fmt_time
-from utils.parse_time import parse_splits, parse_total, validate_splits
+from utils.parse_time import ParseTimeError, parse_splits, parse_total, validate_splits
 
 router = Router()
 
@@ -55,6 +55,26 @@ DISTANCE_CHOICES: tuple[int, ...] = (50, 100, 200, 400, 800)
 _TYPE_ENCODINGS: dict[str, str] = {"swim": "s", "turn": "t"}
 _TYPE_DECODINGS: dict[str, str] = {value: key for key, value in _TYPE_ENCODINGS.items()}
 
+_CANCEL_COMMANDS: set[str] = {
+    "/cancel",
+    "cancel",
+    "стоп",
+    "stop",
+    "отмена",
+    "відміна",
+    "скасувати",
+    "зупинити",
+}
+_REPEAT_COMMANDS: set[str] = {
+    "/repeat",
+    "repeat",
+    "повтор",
+    "повтори",
+    "ще раз",
+    "ещё раз",
+    "?",
+}
+
 
 def _count_turn_segments(segment_types: Sequence[str]) -> int:
     """Return number of turn segments in provided type list."""
@@ -68,6 +88,54 @@ def _count_swim_segments(segment_types: Sequence[str], fallback: int) -> int:
     if not segment_types:
         return fallback
     return len(segment_types) - _count_turn_segments(segment_types)
+
+
+def _normalise_command(text: str) -> str:
+    return text.strip().casefold()
+
+
+def _value_from_error(error: ParseTimeError) -> str | None:
+    value = error.context.get("value") if hasattr(error, "context") else None
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return fmt_time(float(value))
+    return str(value)
+
+
+def _format_parse_error(error: ParseTimeError) -> str:
+    value = _value_from_error(error)
+    if value:
+        return t("add.error.invalid_value").format(value=value)
+    return t("add.error.invalid_generic")
+
+
+async def _handle_control_command(
+    message: types.Message, state: FSMContext, *, step: str
+) -> bool:
+    text = message.text or ""
+    normalized = _normalise_command(text)
+    if not normalized:
+        return False
+    if normalized in _CANCEL_COMMANDS:
+        await state.clear()
+        await message.answer(t("add.error.cancelled"))
+        return True
+    if normalized in _REPEAT_COMMANDS:
+        await message.answer(t("add.error.repeat"))
+        data = await state.get_data()
+        if step == "splits":
+            segments = data.get("segments") or ()
+            await _show_splits_step(message, segments)
+        elif step == "turns":
+            turn_count = _count_turn_segments(data.get("segment_types") or ())
+            if turn_count:
+                await _show_turn_details_step(message, turn_count)
+        elif step == "total":
+            back_target = data.get("total_back_target") or "splits"
+            await _show_total_step(message, back_target)
+        return True
+    return False
 
 
 def _combine_times_by_type(
@@ -454,7 +522,7 @@ async def start_wizard(message: types.Message, state: FSMContext) -> None:
 async def cancel_wizard(callback: types.CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     await callback.answer()
-    await callback.message.answer("Майстер скасовано.")
+    await callback.message.answer(t("add.error.cancelled"))
 
 
 @router.callback_query(
@@ -523,12 +591,16 @@ async def autosum_splits(callback: types.CallbackQuery, state: FSMContext) -> No
 
 @router.message(AddWizardStates.enter_splits)
 async def input_splits(message: types.Message, state: FSMContext) -> None:
+    if await _handle_control_command(message, state, step="splits"):
+        return
     text = message.text or ""
     chunks = text.replace(",", " ").split()
     try:
         splits = parse_splits(chunks)
-    except ValueError:
-        await message.answer(t("error.invalid_time"))
+    except ParseTimeError as exc:
+        await message.answer(
+            f"{_format_parse_error(exc)}\n{t('add.error.format_hint')}"
+        )
         return
 
     data = await state.get_data()
@@ -551,6 +623,7 @@ async def input_splits(message: types.Message, state: FSMContext) -> None:
             return
     await state.set_state(AddWizardStates.enter_total)
     back_target = "turns" if turn_required else "splits"
+    await state.update_data(total_back_target=back_target)
     await _show_total_step(message, back_target)
 
 
@@ -558,12 +631,16 @@ async def input_splits(message: types.Message, state: FSMContext) -> None:
 async def input_turn_details(message: types.Message, state: FSMContext) -> None:
     """Handle turn detail input for strokes that require it."""
 
+    if await _handle_control_command(message, state, step="turns"):
+        return
     text = message.text or ""
     chunks = text.replace(",", " ").split()
     try:
         turn_times = parse_splits(chunks)
-    except ValueError:
-        await message.answer(t("error.invalid_time"))
+    except ParseTimeError as exc:
+        await message.answer(
+            f"{_format_parse_error(exc)}\n{t('add.error.format_hint')}"
+        )
         return
 
     data = await state.get_data()
@@ -577,6 +654,7 @@ async def input_turn_details(message: types.Message, state: FSMContext) -> None:
 
     await state.update_data(turn_times=turn_times)
     await state.set_state(AddWizardStates.enter_total)
+    await state.update_data(total_back_target="turns")
     await _show_total_step(message, "turns")
 
 
@@ -632,11 +710,15 @@ async def even_from_total(callback: types.CallbackQuery, state: FSMContext) -> N
 
 @router.message(AddWizardStates.enter_total)
 async def input_total(message: types.Message, state: FSMContext) -> None:
+    if await _handle_control_command(message, state, step="total"):
+        return
     text = message.text or ""
     try:
         total = parse_total(text)
-    except ValueError:
-        await message.answer(t("error.invalid_time"))
+    except ParseTimeError as exc:
+        await message.answer(
+            f"{_format_parse_error(exc)}\n{t('add.error.format_hint')}"
+        )
         return
 
     data = await state.get_data()
@@ -706,20 +788,21 @@ async def navigate_back(
             return
         await state.set_state(AddWizardStates.choose_template)
         await _clear_after(
-            state, ("segments", "segment_types", "splits", "turn_times", "total")
+            state,
+            ("segments", "segment_types", "splits", "turn_times", "total", "total_back_target"),
         )
         await _show_template_step(callback.message, distance, data.get("style"))
     elif target == "splits":
         data = await state.get_data()
         segments = data.get("segments") or ()
         await state.set_state(AddWizardStates.enter_splits)
-        await _clear_after(state, ("splits", "turn_times", "total"))
+        await _clear_after(state, ("splits", "turn_times", "total", "total_back_target"))
         await _show_splits_step(callback.message, segments)
     elif target == "turns":
         data = await state.get_data()
         turn_count = _count_turn_segments(data.get("segment_types") or ())
         await state.set_state(AddWizardStates.enter_turn_details)
-        await _clear_after(state, ("turn_times", "total"))
+        await _clear_after(state, ("turn_times", "total", "total_back_target"))
         if turn_count > 0:
             await _show_turn_details_step(callback.message, turn_count)
         else:
@@ -733,6 +816,7 @@ async def navigate_back(
             if _needs_turn_step(data.get("style"), data.get("segment_types") or ())
             else "splits"
         )
+        await state.update_data(total_back_target=back_target)
         await _show_total_step(callback.message, back_target)
     else:
         await callback.message.answer("Ця дія недоступна.")

@@ -11,9 +11,11 @@
 - Added Alembic configuration and initial migration for Postgres schema.
 - Added migration tooling (`Makefile` targets) and batch import script from Sheets to Postgres.
 - Added `sprint_bot.domain.analytics` with canonical swim metrics and dedicated tests.
+- Added onboarding scenario tests (`tests/test_onboarding_flow.py`) and UX playbook с mermaid-диаграммами в `docs/UX.md`.
 
 ### Changed
 - Reused domain analytics across handlers, reports and notifications to remove duplicated formulas and improve consistency.
+- Заменён набор PNG-скриншотов в UX-плейбуке на mermaid-диаграммы, чтобы избежать ограничений на бинарные файлы.
 ### Fixed
 - Suppressed unused exception binding in Google Sheets storage to satisfy `ruff` static checks.
 
