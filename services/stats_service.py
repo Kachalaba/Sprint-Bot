@@ -7,12 +7,37 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 from statistics import fmean
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, Mapping, Optional, Sequence, TypedDict, cast
 
 from sprint_bot.domain.analytics import SobStats, TotalPRResult
 from sprint_bot.domain.analytics import calc_sob as _calc_sob
 from sprint_bot.domain.analytics import detect_segment_prs as _detect_segment_prs
 from sprint_bot.domain.analytics import detect_total_pr as _detect_total_pr
+
+
+class TurnRow(TypedDict):
+    result_id: int
+    timestamp: datetime
+    distance: int
+    stroke: str
+    athlete_name: str
+    turn_number: int
+    approach_time: float | None
+    wall_contact_time: float | None
+    push_off_time: float | None
+    underwater_time: float | None
+    total_turn_time: float | None
+
+
+class TurnAnalytics(TypedDict):
+    rows: tuple[TurnRow, ...]
+    progress: tuple["TurnProgressResult", ...]
+
+
+class TurnComparisonSummary(TypedDict):
+    current: Mapping[int, float]
+    previous: Mapping[int, float]
+    comparisons: tuple["TurnComparison", ...]
 
 
 class LeaderboardEntry:
@@ -250,7 +275,7 @@ class StatsService:
             is_pr=bool(row["is_pr"]),
         )
 
-    async def get_turn_analytics(self, athlete_id: int, stroke: str) -> dict:
+    async def get_turn_analytics(self, athlete_id: int, stroke: str) -> TurnAnalytics:
         """Return chronological turn efficiency data for the athlete and stroke."""
 
         rows = await asyncio.to_thread(
@@ -258,15 +283,16 @@ class StatsService:
             athlete_id,
             stroke,
         )
-        progress = self._calculate_turn_progress(rows)
-        return {
+        progress = tuple(self._calculate_turn_progress(rows))
+        analytics: TurnAnalytics = {
             "rows": tuple(rows),
-            "progress": tuple(progress),
+            "progress": progress,
         }
+        return analytics
 
     async def compare_turn_efficiency(
         self, athlete_id: int, period: StatsPeriod
-    ) -> dict:
+    ) -> TurnComparisonSummary:
         """Compare average turn efficiency between consecutive periods."""
 
         now = datetime.now(timezone.utc)
@@ -289,12 +315,13 @@ class StatsService:
             )
         )
         current_map, previous_map = await asyncio.gather(current_task, previous_task)
-        comparisons = self._build_turn_comparisons(previous_map, current_map)
-        return {
+        comparisons = tuple(self._build_turn_comparisons(previous_map, current_map))
+        summary: TurnComparisonSummary = {
             "current": current_map,
             "previous": previous_map,
-            "comparisons": tuple(comparisons),
+            "comparisons": comparisons,
         }
+        return summary
 
     # --- calculation helpers -------------------------------------------------
 
@@ -308,7 +335,7 @@ class StatsService:
             conn.executescript(self._SETUP_SQL)
             conn.commit()
 
-    def _fetch_latest_result(self, athlete_id: int):
+    def _fetch_latest_result(self, athlete_id: int) -> sqlite3.Row | None:
         query = """
             SELECT
                 athlete_id,
@@ -325,7 +352,8 @@ class StatsService:
         """
         with self._connect() as conn:
             cursor = conn.execute(query, (athlete_id,))
-            return cursor.fetchone()
+            row = cursor.fetchone()
+        return cast("sqlite3.Row | None", row)
 
     @staticmethod
     def _period_start(period: StatsPeriod, *, now: datetime | None) -> datetime:
@@ -355,7 +383,7 @@ class StatsService:
         args = (since.isoformat(), limit)
         with self._connect() as conn:
             cursor = conn.execute(query, args)
-            rows = cursor.fetchall()
+            rows = cast(list[sqlite3.Row], cursor.fetchall())
         for row in rows:
             yield LeaderboardEntry(
                 athlete_id=int(row["athlete_id"]),
@@ -364,7 +392,7 @@ class StatsService:
                 attempts=int(row["attempts"] or 0),
             )
 
-    def _fetch_turn_rows(self, athlete_id: int, stroke: str) -> list[dict]:
+    def _fetch_turn_rows(self, athlete_id: int, stroke: str) -> list[TurnRow]:
         query = """
             SELECT
                 r.id AS result_id,
@@ -385,8 +413,8 @@ class StatsService:
         """
         with self._connect() as conn:
             cursor = conn.execute(query, (athlete_id, stroke))
-            rows = cursor.fetchall()
-        results: list[dict] = []
+            rows = cast(list[sqlite3.Row], cursor.fetchall())
+        results: list[TurnRow] = []
         for row in rows:
             timestamp = self._parse_timestamp(row["timestamp"])
             results.append(
@@ -414,8 +442,10 @@ class StatsService:
         """
         with self._connect() as conn:
             cursor = conn.execute(query, (athlete_id, since.isoformat()))
-            row = cursor.fetchone()
-            return int(row[0]) if row else 0
+            row = cast("sqlite3.Row | None", cursor.fetchone())
+        if row is None:
+            return 0
+        return int(row[0])
 
     def _count_prs(self, athlete_id: int, since: datetime) -> int:
         query = """
@@ -425,8 +455,10 @@ class StatsService:
         """
         with self._connect() as conn:
             cursor = conn.execute(query, (athlete_id, since.isoformat()))
-            row = cursor.fetchone()
-            return int(row[0]) if row else 0
+            row = cast("sqlite3.Row | None", cursor.fetchone())
+        if row is None:
+            return 0
+        return int(row[0])
 
     def _fetch_highlights(
         self, athlete_id: int, since: datetime, limit: int
@@ -441,7 +473,7 @@ class StatsService:
         args = (athlete_id, since.isoformat(), limit)
         with self._connect() as conn:
             cursor = conn.execute(query, args)
-            rows = cursor.fetchall()
+            rows = cast(list[sqlite3.Row], cursor.fetchall())
         results: list[ProgressResult] = []
         for row in rows:
             ts_raw = row["timestamp"]
@@ -473,7 +505,7 @@ class StatsService:
         args = (athlete_id, start.isoformat(), end.isoformat())
         with self._connect() as conn:
             cursor = conn.execute(query, args)
-            rows = cursor.fetchall()
+            rows = cast(list[sqlite3.Row], cursor.fetchall())
         return {int(row["turn_number"]): float(row["avg_time"]) for row in rows}
 
     def _build_turn_comparisons(
@@ -500,7 +532,7 @@ class StatsService:
             )
 
     def _calculate_turn_progress(
-        self, rows: Sequence[dict]
+        self, rows: Sequence[TurnRow]
     ) -> Iterable[TurnProgressResult]:
         grouped: dict[int, list[float]] = defaultdict(list)
         for row in rows:

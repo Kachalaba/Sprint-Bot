@@ -6,8 +6,7 @@ import asyncio
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
-
+from typing import Optional, cast
 
 _SETUP_SCRIPT = """
 CREATE TABLE IF NOT EXISTS user_profiles (
@@ -89,7 +88,9 @@ class UserService:
     async def update_group(self, telegram_id: int, group_name: Optional[str]) -> None:
         """Update group/club for a user."""
 
-        await asyncio.to_thread(self._update_field, telegram_id, "group_name", group_name)
+        await asyncio.to_thread(
+            self._update_field, telegram_id, "group_name", group_name
+        )
 
     async def update_name(self, telegram_id: int, full_name: str) -> None:
         """Update full name for a user."""
@@ -112,7 +113,8 @@ class UserService:
                 "SELECT telegram_id, role, full_name, group_name, language FROM user_profiles WHERE telegram_id = ?",
                 (telegram_id,),
             )
-            return cursor.fetchone()
+            row = cursor.fetchone()
+        return cast("Optional[sqlite3.Row]", row)
 
     def _upsert_profile(
         self,
