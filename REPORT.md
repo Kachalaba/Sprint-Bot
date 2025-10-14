@@ -459,3 +459,74 @@ Sprint-Bot/
 - `flake8 tests/test_onboarding_flow.py tests/test_turn_wizard.py`
 - `pip install -r requirements.txt`
 - `pytest -q`
+---
+
+# Step Report — Reports Export Planning
+
+## Карта репозитория
+```text
+Sprint-Bot/
+├── bot.py — точка входа aiogram 3.x, конфигурирует диспетчер и middlewares.
+├── handlers/ — команды и сценарии: экспорт/импорт, прогресс, админские панели.
+├── services/ — процедурные сервисы работы с Google Sheets, аналитикой, экспортом.
+├── reports/ — генераторы визуальных и табличных отчётов (image_report).
+├── sprint_bot/ — новый модуль с DDD-слоями (domain/application/infrastructure).
+│   ├── application/ports — контракты для внешних сервисов (storage, metrics).
+│   ├── application/use_cases — черновики use-case'ов, пока без реализаций.
+│   ├── domain/ — сущности спортсменов, спринтов, результатов.
+│   └── infrastructure/ — адаптеры телеграма, google sheets, s3 и др.
+├── docs/ — пользовательская и техническая документация.
+├── tests/ — юнит- и интеграционные тесты бота.
+├── scripts/, infra/, alembic/ — утилиты деплоя, миграции, DevOps.
+└── requirements.txt, pyproject.toml, Makefile — зависимости и инструменты.
+```
+
+## План работ
+1. Проанализировать текущие сервисы экспорта/аналитики, определить reusable-порты для отчётов и кэширования.
+2. Спроектировать API нового модуля `reports/` (интерфейсы генерации CSV/XLSX и графиков) и адаптеры к существующим данным.
+3. Реализовать команды `/export_csv` и `/export_xlsx`: парсинг аргументов, асинхронный запуск фоновых задач, отправка файлов.
+4. Добавить генерацию графиков (matplotlib) и выдачу PNG по ключевым метрикам.
+5. Встроить кеширование тяжёлых отчётов (диск/Redis) с TTL и инвалидировать по обновлению данных.
+6. Обновить документацию (`docs/reports.md`, `CHANGELOG.md`), отчёт (`REPORT.md`), добавить примеры использования и команды запуска.
+7. Прогнать linters/tests (`black`, `isort`, `flake8`, `pytest -q`) и зафиксировать команды.
+
+## Риски
+- Возможная блокировка event loop при генерации файлов и графиков — потребуется offload в executor или background tasks.
+- Несогласованность данных Google Sheets при длительной подготовке отчётов — нужен срез данных или контроль версий.
+- Кеширование на диске/Redis должно учитывать мультиинстансы бота, иначе возможны race conditions.
+
+## Что дальше
+- Подготовить дизайн модулей: определить DTO/фильтры для экспорта, выбрать формат ключей кэша.
+- Проверить инфраструктуру на предмет готового Redis или реализовать файловый кэш.
+- Согласовать требования по форматам отчётов с тренером (названия колонок, временные зоны).
+
+# Step Report — Reports Export Implementation
+
+## Что сделано
+- Добавлен модуль `reports.cache/data_export/charts` с файловым кэшем (TTL 30 мин), сериализацией CSV/XLSX и генерацией PNG-графиков (швидкість, прогрес).
+- Реализованы хэндлеры `/export_csv`, `/export_xlsx`, `/export_graphs` с парсингом фильтров, оффлоудом в `asyncio.to_thread`, проверкой доступа и выдачей файлов/изображений.
+- Обновлены `bot.py` (подключение роутера), локализации (`i18n/uk.yaml`, `i18n/ru.yaml`), документация (`docs/reports.md`), тесты (`tests/test_reports_export_module.py`) и публичный API `reports/__init__.py`.
+- Запущены форматирование/линты и тесты: `isort`, `black`, `flake8`, `pytest -q` (351 тест, warnings из openpyxl).
+
+## Дифф
+- `reports/`: новые файлы `cache.py`, `charts.py`, `data_export.py`, обновлён `__init__.py`.
+- `handlers/export_reports.py`: новая реализация команд с кэшированием и отправкой файлов/графиков.
+- `bot.py`, `i18n/*.yaml`, `docs/reports.md`, `CHANGELOG.md`, `tests/test_reports_export_module.py` — интеграция и документация.
+
+## Использованные команды
+- `pip install -r requirements.txt`
+- `pip install flake8`
+- `isort handlers/export_reports.py reports/cache.py reports/charts.py reports/data_export.py tests/test_reports_export_module.py`
+- `black handlers/export_reports.py reports/charts.py reports/data_export.py reports/__init__.py reports/cache.py tests/test_reports_export_module.py`
+- `flake8 handlers/export_reports.py reports/cache.py reports/charts.py reports/data_export.py tests/test_reports_export_module.py`
+- `pytest -q`
+
+## Риски
+- Кэш на диске не чистится при обновлении исходных данных — требуется стратегия инвалидизации при импорте.
+- Matplotlib остаётся CPU-heavy: при массовых запросах может потребоваться отдельный worker или очередь задач.
+- Redis пока не задействован, при масштабировании на несколько инстансов понадобится общий кэш.
+
+## Что дальше
+- При необходимости вынести кэш в Redis/S3 и добавить явную инвалидацию при записи новых результатов.
+- Дополнить UX: кнопки/подсказки в меню и команды для выбора фильтров.
+- Рассмотреть генерацию дополнительных метрик (SoB-тренды, boxplot по сегментам).

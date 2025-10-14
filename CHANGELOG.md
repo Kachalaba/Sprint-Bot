@@ -12,6 +12,7 @@
 - Added migration tooling (`Makefile` targets) and batch import script from Sheets to Postgres.
 - Added `sprint_bot.domain.analytics` with canonical swim metrics and dedicated tests.
 - Added onboarding scenario tests (`tests/test_onboarding_flow.py`) and UX playbook с mermaid-диаграммами в `docs/UX.md`.
+- Added async export module with `/export_csv`, `/export_xlsx`, `/export_graphs`, caching, tests, and docs (`docs/reports.md`).
 
 ### Changed
 - Reused domain analytics across handlers, reports and notifications to remove duplicated formulas and improve consistency.
