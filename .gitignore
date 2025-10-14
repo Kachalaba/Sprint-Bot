@@ -9,3 +9,5 @@ build/
 dist/
 logs/
 creds.json
+.coverage
+coverage.xml
