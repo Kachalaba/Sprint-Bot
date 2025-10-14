@@ -203,6 +203,7 @@ def setup_dispatcher(
     from handlers.error_handler import router as error_router
     from handlers.export_analysis import router as export_analysis_router
     from handlers.export_import import router as export_import_router
+    from handlers.export_reports import router as export_reports_router
     from handlers.leaderboard import router as leaderboard_router
     from handlers.menu import router as menu_router
     from handlers.messages import router as messages_router
@@ -235,6 +236,7 @@ def setup_dispatcher(
     dp.include_router(leaderboard_router)
     dp.include_router(reports_router)
     dp.include_router(export_import_router)
+    dp.include_router(export_reports_router)
     dp.include_router(export_analysis_router)
     dp.include_router(search_router)
     dp.include_router(results_router)
