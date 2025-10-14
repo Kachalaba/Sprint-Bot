@@ -530,3 +530,100 @@ Sprint-Bot/
 - При необходимости вынести кэш в Redis/S3 и добавить явную инвалидацию при записи новых результатов.
 - Дополнить UX: кнопки/подсказки в меню и команды для выбора фильтров.
 - Рассмотреть генерацию дополнительных метрик (SoB-тренды, boxplot по сегментам).
+---
+
+# Step Report — Test Infrastructure Planning
+
+## Карта репозитория
+```text
+Sprint-Bot/
+├── bot.py — точка входа бота (aiogram 3), конфигурация диспетчера и middlewares.
+├── handlers/ — legacy и новые aiogram-хэндлеры, командные и сценарные обработчики.
+├── sprint_bot/ — модуль новой архитектуры (domain/application/infrastructure, storage, adapters).
+├── services/, utils/, notifications.py — процедурные сервисы, расчёты сплитов, уведомления и вспомогательные функции.
+├── tests/ — существующие регрессионные сценарии и заготовки под новые unit/contract тесты.
+├── infra/, docker-compose.yml, Dockerfile — окружение разработки, Postgres, Redis, запуск через Docker.
+├── docs/, REPORT*.md, ARCH_PLAN.md — документация и планы миграций.
+├── requirements.txt, pyproject.toml, mypy.ini — управление зависимостями и настройками линтеров.
+└── data/, examples/, reports/ — входные данные, отчёты и шаблоны Telegram сообщений.
+```
+
+## План работ
+1. Подготовить фабрики `factory_boy` для доменных сущностей (Athlete, Race, Split) с учётом схемы `sprint_bot.domain`.
+2. Реализовать фейковые адаптеры `SheetsClientFake`, `TelegramSenderFake` для unit-тестов и репозиториев.
+3. Нарастить покрытие тестами: unit-тесты хэндлеров на aiogram dispatcher, контрактные тесты репозиториев, общие фикстуры.
+4. Настроить `pytest` инфраструктуру (pytest.ini, плагины, покрытия ≥70% критичных модулей) и CI job `tests.yml` с отчётами.
+5. Обновить документацию (CHANGELOG, REPORT) и зафиксировать команды запуска / проверки.
+
+## Что сделано
+- Зафиксировал актуальную карту репозитория и декомпозировал задачу по тестовой инфраструктуре.
+
+## Риски
+- Возможен дрейф фактических моделей и фабрик: необходимо синхронизировать схемы домена и Sheets/Postgres.
+- Интеграция aiogram-диспетчера в тестовом цикле требует аккуратной настройки event loop и фейков Telegram API.
+- В CI могут отсутствовать системные зависимости (Redis, Postgres); покрываем фейками либо docker-сервисами.
+
+## Что дальше
+- Приступить к реализации фабрик и фейков, начать с доменных моделей и тестовых фикстур.
+---
+
+# Step Report — Test Data Scaffolding
+
+## Что сделано
+- Добавлены фабрики `factory_boy` для доменных сущностей `Athlete`, `Split`, `Race` (immutable dataclasses) в `tests/factories/domain.py`.
+- Реализованы фейки интеграций `SheetsClientFake` и `TelegramSenderFake` для изоляции тестов от Google Sheets и Telegram.
+- Пополнены зависимости (`factory_boy`, `Faker`) для генерации данных в тестах.
+
+## Почему так
+- Фабрики закрывают потребность быстро собирать согласованные доменные объекты и контролировать сплиты через `post_generation`.
+- Фейковые клиенты повторяют интерфейсы портов и позволяют строить контрактные тесты без сетевых вызовов.
+- Явные зависимости фиксируют версии и упрощают воспроизведение окружения в CI.
+
+## Риски
+- Расширение requirements увеличивает время установки зависимостей — контролируем через кеширование в CI.
+- При изменении доменных моделей фабрики нужно держать в синхронизации, иначе тесты потеряют актуальность.
+
+## Дифф
+- `tests/factories/` — новые фабрики на `factory_boy`.
+- `tests/fakes/` — фейки клиентов Google Sheets и Telegram.
+- `requirements.txt` — добавлены `factory_boy` и `Faker`.
+
+## Команды
+- `black tests/factories tests/fakes`
+- `isort tests/factories tests/fakes`
+
+## Что дальше
+- Сконфигурировать pytest/pytest.ini и приступить к написанию контрактных и хэндлер-тестов с использованием новых фабрик и фейков.
+---
+
+# Step Report — Tests & CI foundation
+
+## Что сделано
+- Добавлен healthcheck-хэндлер `/ping` в `sprint_bot/application/handlers/ping.py` с агрегацией данных из стораджа.
+- Написаны контрактные тесты для `GoogleSheetsStorage` (`tests/sprint_bot/test_google_sheets_repositories.py`) и e2e-тест хэндлера через aiogram dispatcher (`tests/sprint_bot/test_ping_handler.py`).
+- Настроен `pytest.ini` с покрытием критичных модулей, добавлены зависимости (`pytest`, `pytest-asyncio`, `pytest-cov`).
+- Создан GitHub Actions workflow `.github/workflows/tests.yml` для запуска pytest и загрузки `coverage.xml` артефакта.
+
+## Почему так
+- `/ping` служит живым чекпоинтом и облегчает smoke-тестирование стораджа и Telegram-слоя.
+- Контрактные тесты фиксируют разбор данных из Google Sheets и гарантируют корректность фейков.
+- Центральная конфигурация pytest + CI даёт воспроизводимость и контроль покрытия ≥70% по новым модулям.
+
+## Риски
+- Расширенный workflow увеличивает время CI; требуется кеширование pip (включено через `actions/setup-python`).
+- Фейковые клиенты нужно синхронизировать с реальными интерфейсами при изменениях Google Sheets/Telegram SDK.
+
+## Дифф
+- `sprint_bot/application/handlers/ping.py` — новый router.
+- `tests/sprint_bot/` — тесты для хэндлера и репозиториев.
+- `pytest.ini`, обновлён `requirements.txt`, добавлен workflow `tests.yml`.
+
+## Команды
+- `black sprint_bot/application/handlers tests/sprint_bot`
+- `isort sprint_bot/application/handlers tests/sprint_bot`
+- `pip install -r requirements.txt`
+- `pytest -q`
+
+## Что дальше
+- Расширить тесты на остальные репозитории (Postgres) и обвязку уведомлений, интегрировать фейки в большее количество модулей.
+

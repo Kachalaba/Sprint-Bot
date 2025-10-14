@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 ### Added
+- Added `/ping` healthcheck handler, pytest-based contract tests, and CI workflow exporting coverage.
+- Added тестовые фабрики и фейковые клиенты Sheets/Telegram для unit-тестов.
+- Planned тестовую инфраструктуру (фабрики, фейки, pytest/CI) и задокументировано в `REPORT.md`.
 - Technical audit report summarised in `REPORT_AUDIT.md` and `REPORT.md`.
 - Added architecture migration plan (`ARCH_PLAN.md`) and domain/application/infrastructure skeleton.
 - Repository map and storage migration roadmap documented in `REPORT.md`.
