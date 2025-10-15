@@ -10,6 +10,8 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
+from utils.personal_data import scrub_sensitive_mapping
+
 __all__ = ["get_logger"]
 
 LOG_DIR = Path("logs")
@@ -30,6 +32,7 @@ class JsonLogFormatter(logging.Formatter):
             "cmd": getattr(record, "cmd", None),
             "latency_ms": getattr(record, "latency_ms", None),
         }
+        scrub_sensitive_mapping(payload)
         return json.dumps(payload, ensure_ascii=False)
 
 

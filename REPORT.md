@@ -41,6 +41,61 @@ Sprint-Bot/
 
 ---
 
+# Step Report — Security Hardening
+
+## Карта репозитория
+```text
+Sprint-Bot/
+├── bot.py — точка входа, конфигурирует Telegram Bot API, Sentry и DI-сервисы.
+├── services/base.py — загрузка env, фабрика Bot, доступ к Google Sheets.
+├── notifications.py — очередь уведомлений и логирование взаимодействий с чатами.
+├── backup_service.py — резервные копии в S3 через boto3.
+├── utils/logger.py, utils/sentry.py, utils/personal_data.py — форматирование логов,
+│   интеграция с Sentry и маскирование персональных идентификаторов.
+├── docker-compose.yml, Dockerfile, entrypoint.sh — контейнерное окружение.
+├── SECURITY_NOTES.md — сводка по харднингу и follow-up задачам.
+├── docs/, CHANGELOG.md, REPORT.md — документация и аудит.
+├── tests/test_logger.py — проверка JSON-логгера и метаданных.
+└── infra/, scripts/, data/ — инфраструктурные скрипты и данные.
+```
+
+## План работ
+1. Перепроверить гигиену секретов: обновить `.env.example`, расширить `.gitignore`, убедиться в отсутствии PII в репозитории.
+2. Ввести единый слой маскирования для логов/уведомлений, скорректировать тесты и минимизировать вывод `chat_id`/`username`.
+3. Настроить Sentry scrubbers и безопасную установку пользовательских тегов.
+4. Добавить таймауты сетевых клиентов (Telegram, S3) и liveness-пробу в `docker-compose`.
+5. Задокументировать изменения (`SECURITY_NOTES.md`, `CHANGELOG.md`, `REPORT.md`) и зафиксировать команды.
+
+## Что сделано
+- Добавлен модуль `utils.personal_data` и интегрирован в `utils/logger.py`, `notifications.py`, `handlers/onboarding.py` и `utils/sentry.py` для детерминированного маскирования `chat_id`/`user_id` и фильтрации перед отправкой в Sentry.
+- Обновлены `.env.example` и `.gitignore`, добавлено предупреждение о секретах, игнорирование ключевых файлов и создан `SECURITY_NOTES.md` как базис для дальнейшего харднинга.
+- Telegram Bot создаётся с `aiohttp.ClientTimeout`, а boto3-клиент с `botocore.Config`, что исключает бесконечные зависания; `docker-compose.yml` теперь содержит healthcheck процесса.
+- Обновлены `tests/test_logger.py`, `CHANGELOG.md`, `REPORT.md` и прогнаны форматтеры, чтобы тесты отражали маскирование и документация — принятые решения.
+
+## Риски
+- Маска детерминированная: при утечке исходных ID и хэшей их можно соотнести. Для строгих требований потребуется соль per-env.
+- Healthcheck проверяет только живость процесса; функциональный провал бота может остаться незамеченным без дополнительных проб.
+- gspread не предоставляет явного API для таймаутов — сетевые сбои Sheets пока обрабатываются стандартными исключениями.
+
+## Дифф
+- `utils.personal_data.py`, `utils/logger.py`, `utils/sentry.py`, `notifications.py`, `handlers/onboarding.py` — маскирование PII и scrubbers.
+- `.env.example`, `.gitignore`, `SECURITY_NOTES.md`, `CHANGELOG.md`, `REPORT.md` — документация и политика секретов.
+- `services/base.py`, `backup_service.py`, `docker-compose.yml` — таймауты, healthcheck и конфигурация клиентов.
+- `tests/test_logger.py` — ожидание хешированных идентификаторов в логах.
+
+## Использованные команды
+- `isort backup_service.py handlers/onboarding.py notifications.py services/base.py tests/test_logger.py utils/logger.py utils/personal_data.py utils/sentry.py`
+- `black backup_service.py handlers/onboarding.py notifications.py services/base.py tests/test_logger.py utils/logger.py utils/personal_data.py utils/sentry.py`
+- `pip install -r requirements.txt`
+- `pytest -q`
+
+## Что дальше
+- Реализовать health/ready endpoint внутри приложения для более информативных проб контейнера.
+- Добавить конфигурируемые таймауты/ретраи для Google Sheets при появлении официальной поддержки в gspread.
+- Рассмотреть использование per-environment соли для маскирования, чтобы усложнить кросс-окружные сопоставления.
+
+---
+
 # Step Report — CI/CD Pipeline Implementation
 
 ## Что сделано

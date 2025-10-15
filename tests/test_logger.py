@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import utils.logger as logger_module
 from utils.logger import get_logger
+from utils.personal_data import mask_identifier
 
 
 def test_logger_writes_json_to_rotating_file_and_stderr(
@@ -50,11 +51,11 @@ def test_logger_writes_json_to_rotating_file_and_stderr(
 
     assert warning_payload["msg"] == "heads up"
     assert warning_payload["level"] == "WARNING"
-    assert warning_payload["user_id"] == 7
+    assert warning_payload["user_id"] == mask_identifier(7, prefix="user")
 
     assert error_payload["msg"] == "boom"
     assert error_payload["level"] == "ERROR"
-    assert error_payload["user_id"] == 42
+    assert error_payload["user_id"] == mask_identifier(42, prefix="user")
     assert error_payload["cmd"] == "/start"
     assert error_payload["latency_ms"] == 123
 

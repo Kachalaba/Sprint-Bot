@@ -15,6 +15,12 @@ services:
     restart: unless-stopped
     depends_on:
       - postgres
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import os, signal; os.kill(1, 0)'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   postgres:
     image: postgres:15
