@@ -18,13 +18,23 @@ from notifications import send_notification
 try:  # pragma: no cover - optional dependency
     import boto3
     from botocore.client import BaseClient
+    from botocore.config import Config
     from botocore.exceptions import BotoCoreError, ClientError
 except ImportError:  # pragma: no cover - optional dependency
     boto3 = None  # type: ignore[assignment]
     BaseClient = Any  # type: ignore[assignment]
+    Config = Any  # type: ignore[assignment]
     BotoCoreError = ClientError = Exception  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
+if boto3 is not None:
+    _BOTO_CLIENT_CONFIG: Config | None = Config(
+        connect_timeout=5,
+        read_timeout=30,
+        retries={"max_attempts": 3},
+    )
+else:  # pragma: no cover - executed only when boto3 is absent in runtime
+    _BOTO_CLIENT_CONFIG = None
 
 _BOTO3_MISSING_WARNING = (
     "boto3 is not installed; backup functionality is disabled until the "
@@ -280,10 +290,12 @@ class BackupService:
                 self._client = self._client_factory()
             else:
                 session = boto3.session.Session()
-                self._client = session.client(
-                    "s3",
-                    endpoint_url=self.endpoint_url,
-                )
+                client_kwargs: dict[str, Any] = {}
+                if self.endpoint_url:
+                    client_kwargs["endpoint_url"] = self.endpoint_url
+                if _BOTO_CLIENT_CONFIG is not None:
+                    client_kwargs["config"] = _BOTO_CLIENT_CONFIG
+                self._client = session.client("s3", **client_kwargs)
         return self._client
 
     @staticmethod

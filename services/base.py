@@ -10,12 +10,15 @@ from typing import Optional, cast
 
 import gspread
 from aiogram import Bot
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiohttp import ClientTimeout
 from dotenv import load_dotenv
 
 # --- Environment setup ---
 load_dotenv()
 
 logger = logging.getLogger(__name__)
+_TELEGRAM_TIMEOUT = ClientTimeout(total=30.0, connect=5.0, sock_read=30.0)
 
 # --- Bot Initialization ---
 
@@ -29,7 +32,8 @@ def get_bot() -> Bot:
         raise RuntimeError(
             "BOT_TOKEN environment variable must be set and non-empty to create the bot."
         )
-    return Bot(token=token, parse_mode="HTML")
+    session = AiohttpSession(timeout=_TELEGRAM_TIMEOUT)
+    return Bot(token=token, parse_mode="HTML", session=session)
 
 
 def _get_credentials_path() -> Path:

@@ -16,6 +16,7 @@ from i18n import t
 from sprint_bot.domain.analytics import avg_speed
 from utils import fmt_time
 from utils.logger import get_logger
+from utils.personal_data import mask_identifier
 
 logger = get_logger(__name__)
 
@@ -173,7 +174,7 @@ async def _deliver_notification(notification: QueuedNotification) -> None:
             if attempt == _DEFAULT_DELIVERY_ATTEMPTS:
                 logger.warning(
                     "Failed to deliver notification to %s after %s attempts: %s",
-                    notification.chat_id,
+                    mask_identifier(notification.chat_id, prefix="chat"),
                     attempt,
                     exc,
                     exc_info=True,
@@ -187,7 +188,7 @@ async def _deliver_notification(notification: QueuedNotification) -> None:
                 return
             logger.warning(
                 "Notification delivery to %s failed (attempt %s), retrying in %.1fs",
-                notification.chat_id,
+                mask_identifier(notification.chat_id, prefix="chat"),
                 attempt,
                 delay,
                 exc_info=True,
@@ -299,7 +300,10 @@ class NotificationService:
             if chat_id in self._subscribers:
                 return False
             self._subscribers.add(chat_id)
-            logger.info("Chat %s subscribed to notifications", chat_id)
+            logger.info(
+                "Chat %s subscribed to notifications",
+                mask_identifier(chat_id, prefix="chat"),
+            )
             return True
 
     async def unsubscribe(self, chat_id: int) -> bool:
@@ -309,7 +313,10 @@ class NotificationService:
             if chat_id not in self._subscribers:
                 return False
             self._subscribers.remove(chat_id)
-            logger.info("Chat %s unsubscribed from notifications", chat_id)
+            logger.info(
+                "Chat %s unsubscribed from notifications",
+                mask_identifier(chat_id, prefix="chat"),
+            )
             return True
 
     async def is_subscribed(self, chat_id: int) -> bool:
@@ -347,7 +354,7 @@ class NotificationService:
         if recipients:
             logger.info(
                 "Broadcasting result update for athlete %s to %s subscribers",
-                athlete_id,
+                mask_identifier(athlete_id, prefix="user"),
                 len(recipients),
             )
 
@@ -405,7 +412,8 @@ class NotificationService:
         delay, should_send = self._trainer_delivery_plan(chat_id, text)
         if not should_send:
             logger.debug(
-                "Suppressing duplicate trainer notification for chat %s", chat_id
+                "Suppressing duplicate trainer notification for chat %s",
+                mask_identifier(chat_id, prefix="chat"),
             )
             return
         if delay > 0:

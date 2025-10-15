@@ -28,6 +28,7 @@ from keyboards import (
 from role_service import ROLE_ATHLETE, ROLE_TRAINER, RoleService
 from services import get_athletes_worksheet
 from services.user_service import UserProfile, UserService
+from utils.personal_data import mask_identifier
 
 logger = logging.getLogger(__name__)
 
@@ -136,9 +137,7 @@ async def _trainer_label(role_service: RoleService, trainer_id: int) -> str:
     try:
         trainers = await role_service.list_users(roles=(ROLE_TRAINER,))
     except Exception:  # pragma: no cover - defensive logging
-        logger.debug(
-            "Unable to fetch trainer list for label", exc_info=True
-        )
+        logger.debug("Unable to fetch trainer list for label", exc_info=True)
         return str(trainer_id)
     for trainer in trainers:
         if trainer.telegram_id == trainer_id:
@@ -162,9 +161,7 @@ async def _append_athlete_row(user_id: int, name: str) -> None:
             [user_id, name, timestamp],
         )
     except Exception as exc:  # pragma: no cover - external dependency
-        logger.warning(
-            "Failed to append athlete %s to worksheet: %s", user_id, exc
-        )
+        logger.warning("Failed to append athlete %s to worksheet: %s", user_id, exc)
 
 
 async def _proceed_to_group(state: FSMContext, message: Message) -> None:
@@ -290,9 +287,7 @@ async def start_onboarding(
         await state.update_data(**payload)
         label = await _trainer_label(role_service, trainer_id) if trainer_id else None
         if label:
-            await message.answer(
-                t("onb.trainer_pending").format(trainer=label)
-            )
+            await message.answer(t("onb.trainer_pending").format(trainer=label))
     elif invalid_payload:
         await message.answer(t("onb.invite_invalid"))
 
@@ -457,7 +452,10 @@ async def process_language(
     user_id = callback.from_user.id
 
     if not full_name:
-        logger.warning("Missing name in onboarding state for %s", user_id)
+        logger.warning(
+            "Missing name in onboarding state for %s",
+            mask_identifier(user_id, prefix="user"),
+        )
         consume_invite(data.get("invite_code"))
         await callback.answer(t("user.onboarding_restart"), show_alert=True)
         await state.clear()

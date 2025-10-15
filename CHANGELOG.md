@@ -4,6 +4,7 @@
 ### Added
 - Added `/ping` healthcheck handler, pytest-based contract tests, and CI workflow exporting coverage.
 - Added тестовые фабрики и фейковые клиенты Sheets/Telegram для unit-тестов.
+- Added `SECURITY_NOTES.md` documenting hardening rules and next steps.
 - Planned тестовую инфраструктуру (фабрики, фейки, pytest/CI) и задокументировано в `REPORT.md`.
 - Planned CI/CD pipeline rollout: pre-commit hooks, strict mypy, GitHub Actions раздельные пайплайны и обновление Makefile/README.
 - Added `.pre-commit-config.yaml`, dev-зависимости (black, isort, ruff, mypy, pre-commit) и README-бейджі CI/CD.
@@ -24,6 +25,7 @@
 - Reused domain analytics across handlers, reports and notifications to remove duplicated formulas and improve consistency.
 - Заменён набор PNG-скриншотов в UX-плейбуке на mermaid-диаграммы, чтобы избежать ограничений на бинарные файлы.
 - Reworked Makefile (`format`, `lint`, `test`, `build`, `run`), ужесточён `mypy` (`strict` для `sprint_bot.domain` и `services`), типизированы сервисы (`base`, `stats_service`, `user_service`).
+- Hardened observability by masking chat/user identifiers in logs & Sentry, enforced client timeouts, and added docker healthcheck.
 ### Fixed
 - Suppressed unused exception binding in Google Sheets storage to satisfy `ruff` static checks.
 
