@@ -6,7 +6,7 @@ import logging
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 import gspread
 from aiogram import Bot
@@ -147,7 +147,8 @@ def get_all_sportsmen() -> list[str]:
 
     try:
         # Assuming names are in the second column (B) starting from the second row
-        return worksheet.col_values(2)[1:]
+        values = cast(list[str], worksheet.col_values(2))
+        return values[1:]
     except (
         gspread.exceptions.GSpreadException
     ) as e:  # pragma: no cover - relies on external service

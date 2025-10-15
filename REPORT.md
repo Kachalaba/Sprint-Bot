@@ -41,6 +41,83 @@ Sprint-Bot/
 
 ---
 
+# Step Report — CI/CD Pipeline Implementation
+
+## Что сделано
+- Настроен `pre-commit` (black, isort, ruff, trailing-whitespace, end-of-file-fixer) и добавлены dev-зависимости в `requirements.txt`.
+- Усилен `mypy` (`strict` для `sprint_bot.domain` и `services`), приведён код `services/base.py`, `services/stats_service.py`, `services/user_service.py` к строгой типизации.
+- Обновлён `Makefile` (цели `format`, `lint`, `test`, `build`, `run`), README c бейджами й гайдлайном CI/CD.
+- Перестроены GitHub Actions: новые workflows `lint.yml`, `tests.yml`, `docker.yml` (buildx, semver-теги) вместо `ci.yml`/`docker-publish.yml`.
+
+## Почему так
+- Pre-commit и Makefile дают единые точки входа для локальной разработки и CI.
+- Строгая типизация на `services/` и `domain/` ловит регрессии до рантайма и синхронизирует с roadmap аудита.
+- Разделённые workflows ускоряют обратную связь и упрощают отладку (lint ↔ tests ↔ docker).
+
+## Риски
+- Первичный запуск `pre-commit` требует скачивания сред — стоит кешировать в CI.
+- Docker workflow полагается на секреты Docker Hub и соблюдение семвер-тегов; без них push не произойдёт.
+- Усиленный `mypy` может требовать доп. типизации при изменении сервисов.
+
+## Дифф
+- `.pre-commit-config.yaml`, обновлён `requirements.txt`, `Makefile`, `README.md`, `mypy.ini`.
+- GitHub Actions: удалены `ci.yml`/`docker-publish.yml`, добавлены `lint.yml`, `tests.yml`, `docker.yml`.
+- `services/base.py`, `services/stats_service.py`, `services/user_service.py` приведены к строгим типам, исправлены предупреждения `mypy`.
+
+## Использованные команды
+- `isort services/user_service.py services/stats_service.py services/base.py`
+- `black services/user_service.py services/stats_service.py`
+- `ruff check services/user_service.py services/stats_service.py`
+- `mypy --strict sprint_bot/domain services`
+- `pip install -r requirements.txt`
+- `make test`
+
+## Что дальше
+- Расширить строгую типизацию на остальные слои (`infrastructure/storage`, `services/*`).
+- Добавить кеширование зависимостей в Docker workflow и вынести docker-переменные в environment matrix.
+- Расширить coverage на инфраструктурные модули и обновить цели Makefile под интеграционные тесты.
+
+---
+
+# Step Report — CI/CD Pipeline Planning
+
+## Карта репозитория
+```text
+Sprint-Bot/
+├── bot.py — точка входа Telegram-бота, сборка Application и запуск aiogram.
+├── sprint_bot/ — новая архитектура: application (handlers, use_cases), domain (модели, правила), infrastructure (storage, gateways).
+├── handlers/, keyboards.py, menu_callbacks.py — легаси- и новые aiogram-хэндлеры, клавиатуры и коллбеки.
+├── services/, utils/, notifications.py — процедурные сервисы расчёта сплитов, шаблоны сообщений, вспомогательные утилиты.
+├── reports/, template_service.py — генерация отчётов, кэш и экспорт данных.
+├── tests/ — unit/интеграционные сценарии, фабрики и фейки для стораджей и Telegram.
+├── infra/, docker-compose.yml, Dockerfile, entrypoint.sh — инфраструктура запуска, Postgres/Redis, Docker-окружение.
+├── alembic/, alembic.ini, db/ — миграции и SQLAlchemy модели.
+├── docs/, README.md, REPORT*.md — документация, аудиты, планы развития.
+├── requirements.txt, pyproject.toml, mypy.ini, pytest.ini — управление зависимостями и настройками линтеров/тестов.
+└── scripts/, install.sh — вспомогательные CLI и скрипты деплоя.
+```
+
+## План работ
+1. **pre-commit** — добавить `.pre-commit-config.yaml` с `black`, `isort`, `ruff`, `trailing-whitespace`, `end-of-file-fixer`; обновить инструкции в README и Makefile (`format`, `lint`).
+2. **Типизация** — расширить `mypy --strict` для `domain/` и `services/`, обеспечить соответствие в `mypy.ini`, устранить нарушения.
+3. **GitHub Actions** — разнести pipeline на `lint.yml`, `tests.yml`, `docker.yml`; включить кеширование pip, артефакты покрытия, docker buildx, теги по semver.
+4. **Makefile** — описать цели `format`, `lint`, `test`, `build`, `run`; синхронизировать с README и CI.
+5. **Документация** — обновить `CHANGELOG.md`, `REPORT.md`, README (бейджи/шилды), описать команды запуска и требования к пайплайну.
+
+## Риски
+- Высокая строгость `mypy --strict` может вскрыть существующий долг в `services/` и `domain/`; возможно потребуется рефакторинг и заглушки типов.
+- Расхождение между Makefile и GitHub Actions приведёт к «дрейфу» команд; нужно обеспечить единые entrypoints.
+- Docker workflow потребует секретов и версионирования тэгов; важно предусмотреть fallback для локального запуска без push.
+
+## Что сделано
+- Построена актуальная карта репозитория с упором на компоненты, затрагиваемые пайплайном.
+- Сформирован пошаговый план внедрения CI/CD конвейера с оценкой рисков и зависимостей.
+
+## Что дальше
+- Реализовать задачи плана: подготовить конфигурацию pre-commit, настроить mypy и GitHub Actions, синхронизировать Makefile и документацию.
+
+---
+
 # Step Report — Technical Audit
 
 ## Что сделано

@@ -1,5 +1,9 @@
 # Sprint-Bot для тренера з плавання
 
+[![Lint](https://github.com/kachalaba/Sprint-Bot/actions/workflows/lint.yml/badge.svg)](https://github.com/kachalaba/Sprint-Bot/actions/workflows/lint.yml)
+[![Tests](https://github.com/kachalaba/Sprint-Bot/actions/workflows/tests.yml/badge.svg)](https://github.com/kachalaba/Sprint-Bot/actions/workflows/tests.yml)
+[![Docker](https://github.com/kachalaba/Sprint-Bot/actions/workflows/docker.yml/badge.svg)](https://github.com/kachalaba/Sprint-Bot/actions/workflows/docker.yml)
+
 Як тренер, занурений у процес щоденних тренувань, я пройшов усі болючі етапи: нескінченні таблиці, забуті нагадування, розібрані результати учнів. Sprint-Bot створений саме для того, щоб повернути вам час у воді й забрати рутину з рук.
 
 ## Яку проблему вирішує Sprint-Bot
@@ -29,6 +33,14 @@
 - **Sentry** — контроль за помилками ще до того, як їх помітить команда.
 - **S3-сховище** — резервні копії, що не загубляться.
 - **GitHub Actions** — CI/CD, який гарантує стабільні релізи.
+
+## CI/CD та локальна розробка
+- **pre-commit**: `pip install -r requirements.txt && pre-commit install` встановлює хуки (`black`, `isort`, `ruff`, trailing whitespace, end-of-file fixer).
+- **Форматування**: `make format` застосує `isort` і `black` до всього репозиторію.
+- **Лінт та типи**: `make lint` запускає `ruff` і `mypy --strict` для `sprint_bot/domain` та `services`.
+- **Тести**: `make test` виконує `pytest` з покриттям і генерує `coverage.xml` для CI.
+- **Контейнер**: `make build` збирає локальний образ, `make run` піднімає стек через `docker compose`.
+- **GitHub Actions**: окремі пайплайни `lint.yml`, `tests.yml`, `docker.yml` забезпечують швидкий фідбек і збір образів із semver-тегами.
 
 ## З чого почати
 1. **Клонуйте репозиторій** або завантажте реліз у зручну теку.
