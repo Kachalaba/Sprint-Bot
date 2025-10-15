@@ -1,3 +1,48 @@
+# Step Report — Mermaid Demo Replacement
+
+## Карта репозиторію
+```text
+Sprint-Bot/
+├── sprint_bot/ — доменна логіка, application use-case-и та інфраструктурні адаптери.
+├── handlers/, filters/, middlewares/ — Telegram-хендлери та обгортки aiogram.
+├── services/, reports/, notifications.py — легасі-сервіси, генерація звітів та сповіщення.
+├── utils/, backup_service.py, template_service.py — утиліти, логування, бекапи й шаблони.
+├── docs/, README.md, SETUP.md, ARCHITECTURE.md, OPERATIONS.md — супровідна документація.
+├── tests/, data/, examples/ — автотести, фікстури та демо-дані.
+├── alembic/, db/, infra/ — схеми БД, міграції та інструменти розгортання.
+├── Dockerfile, docker-compose.yml, Makefile, entrypoint.sh — сценарії запуску й CI/CD.
+└── requirements.txt, pyproject.toml, mypy.ini, pytest.ini — залежності, форматери та типізація.
+```
+
+## План робіт
+1. Видалити PNG-файли з `docs/images/`, щоб виконати вимогу «бінарні файли не підтримуються».
+2. Замінити візуалізації в `README.md` на Mermaid-діаграми, зберігши демонстраційний контент українською.
+3. Оновити `CHANGELOG.md`, `REPORT.md`, повторно зафіксувати команди та прогнати тести.
+
+## Що зроблено
+- Прибрано каталог `docs/images/` з PNG-артефактами; README тепер показує послідовність діалогу й приклад аналітики через Mermaid.
+- Актуалізовано звіт (`REPORT.md`) і changelog із описом заміни ілюстрацій без бінарних вкладень.
+
+## Ризики
+- Відображення Mermaid залежить від Markdown-рендерера (GitHub/GitLab). Потрібно перевіряти, що `sequenceDiagram` та `pie` підтримуються на обраній платформі.
+
+## Діфф
+- Видалено `docs/images/analytics-dashboard.png` та `docs/images/chat-demo-hero.png`.
+- Оновлено `README.md`, щоб використовувати Mermaid-послідовність і діаграму розподілу сплітів.
+- Оновлено `CHANGELOG.md` і цей `REPORT.md` для відображення змін.
+
+## Використані команди
+- `git rm -r docs/images`
+- `apply_patch README.md`
+- `pip install -r requirements.txt`
+- `pytest -q`
+
+## Що далі
+- Перевірити візуалізацію Mermaid у README після рендерингу на платформі репозиторію.
+- За потреби додати PlantUML-версії схем як текстові альтернативи.
+
+---
+
 # Step Report — Binary Asset Cleanup
 
 ## Карта репозитория
@@ -40,6 +85,68 @@ Sprint-Bot/
 - Проверить, что mermaid корректно отображается в GitLab/GitHub и дописать инструкции по генерации артефактов при необходимости.
 
 ---
+
+# Step Report — Self-Documentation Planning
+
+## Карта репозиторія
+```text
+Sprint-Bot/
+├── bot.py — точка входу aiogram-додатка та збірка Application.
+├── sprint_bot/ — нова модульна архітектура (domain/application/infrastructure) для поступового рефакторингу.
+├── handlers/, keyboards.py, menu_callbacks.py — легасі-хендлери Telegram-бота та клавіатури.
+├── services/, reports/, notifications.py — сервісний шар, генерація звітів і push-сповіщення.
+├── infra/, db/, alembic/ — робота з Postgres та Alembic-міграціями.
+├── utils/, filters/, middlewares/ — допоміжні утиліти, фільтри aiogram і middleware.
+├── docs/, REPORT*.md, SECURITY_NOTES.md — документація, аудити й дорожні карти.
+├── tests/, examples/, data/ — автотести, приклади імпорту й стартові JSON-шаблони.
+├── Dockerfile, docker-compose.yml, Makefile, entrypoint.sh — інфраструктура запуску.
+└── requirements.txt, pyproject.toml, mypy.ini, pytest.ini — залежності й конфіг лінтингу/типізації.
+```
+
+## План робіт
+1. **README** — переформулювати value proposition українською, додати шильди, список фіч і посилання на супровідні документи.
+2. **SETUP.md** — описати локальний та Docker-запуск, змінні середовища й налаштування Google API (з перевіркою команд).
+3. **ARCHITECTURE.md** — зафіксувати шарову архітектуру та залежності у вигляді Mermaid-діаграми й тексту.
+4. **OPERATIONS.md** — задокументувати резервні копії, міграції, ротацію ключів та оновлення продакшену.
+5. **Артефакти** — підготувати демонстраційні зображення чатів/звіту та оновити `REPORT.md`, `CHANGELOG.md` після реалізації.
+
+## Ризики
+- Необхідно верифікувати кожен сценарій запуску на чистому оточенні, інакше інструкція «з нуля до запуску» буде неповною.
+- Відсутність живих скриншотів може знизити довіру — доведеться згенерувати власні ілюстрації без доступу до бойових чатів.
+- Документація швидко застаріває: потрібно синхронізувати README та нові файли з актуальним Makefile/CI.
+
+## Що далі
+- Реалізувати план: додати нові документи, оновити README та підготувати графічні артефакти.
+- Перевірити, що всі команди з `SETUP.md` проходять на чистому середовищі (pip install, pytest, docker compose).
+
+---
+
+# Step Report — Ukrainian Documentation Rollout
+
+## Що зроблено
+- Переписано `README.md` українською з чітким value proposition, шильдами, переліком фіч та посиланнями на супровідні документи.
+- Створено `SETUP.md`, `ARCHITECTURE.md`, `OPERATIONS.md`, що описують локальний/Docker запуск, шарову архітектуру й операційні процеси.
+- Згенеровано демонстраційні зображення (`docs/images/chat-demo-hero.png`, `docs/images/analytics-dashboard.png`) для README (заміщені Mermaid-версіями на наступному етапі).
+
+## Ризики
+- Штучно згенеровані зображення відрізняються від реальних чатів — необхідно оновити після отримання продакшен-скринів.
+- Інструкції можуть застаріти після змін у Makefile або конфігах; потрібен регулярний аудит документації.
+
+## Діфф
+- Нові файли: `SETUP.md`, `ARCHITECTURE.md`, `OPERATIONS.md`, графічні артефакти в `docs/images/` (видалені після переходу на Mermaid-діаграми).
+- Оновлено `README.md` з описом цінності, фіч і посиланнями на документи.
+- Оновлено `CHANGELOG.md` та цей `REPORT.md`.
+
+## Використані команди
+- `python - <<'PY' ...` — генерація демонстраційних PNG.
+- `pip install -r requirements.txt` — валідація залежностей перед тестами.
+- `pytest -q` — регресійний прогін (усі тести зелені, окрім відомих Deprecation warnings від openpyxl).
+
+## Що далі
+- Перевірити README/SETUP у прев'ю та зібрати фідбек від тренерів.
+- Оновити демонстраційні зображення після появи реальних скриншотів з продакшену.
+
+
 
 # Step Report — Security Hardening
 

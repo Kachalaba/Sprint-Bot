@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 ### Added
+- Documented self-documentation roadmap in `REPORT.md` для оновлення інструкцій українською.
+- Added українські гайдлайни: оновлений README з шильдами, `SETUP.md`, `ARCHITECTURE.md`, `OPERATIONS.md`, демо-ілюстрації.
 - Added `/ping` healthcheck handler, pytest-based contract tests, and CI workflow exporting coverage.
 - Added тестовые фабрики и фейковые клиенты Sheets/Telegram для unit-тестов.
 - Added `SECURITY_NOTES.md` documenting hardening rules and next steps.
@@ -23,7 +25,7 @@
 
 ### Changed
 - Reused domain analytics across handlers, reports and notifications to remove duplicated formulas and improve consistency.
-- Заменён набор PNG-скриншотов в UX-плейбуке на mermaid-диаграммы, чтобы избежать ограничений на бинарные файлы.
+- Замінили демонстраційні PNG (UX-плейбук, README) на Mermaid-діаграми, щоб уникнути зберігання бінарних файлів у репозиторії.
 - Reworked Makefile (`format`, `lint`, `test`, `build`, `run`), ужесточён `mypy` (`strict` для `sprint_bot.domain` и `services`), типизированы сервисы (`base`, `stats_service`, `user_service`).
 - Hardened observability by masking chat/user identifiers in logs & Sentry, enforced client timeouts, and added docker healthcheck.
 ### Fixed
