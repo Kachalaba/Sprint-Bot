@@ -306,66 +306,78 @@ async def main() -> None:
     from template_service import TemplateService
 
     bot = get_bot()
-    turn_service = TurnService()
-    notification_service = NotificationService(bot=bot)
-    chat_service = ChatService()
-    await chat_service.init()
-    admin_chat_ids = _parse_admin_chat_ids(ADMIN_IDS)
-    role_service = RoleService()
-    await role_service.init(admin_ids=admin_chat_ids)
-    user_service = UserService()
-    await user_service.init()
-    audit_service = AuditService()
-    await audit_service.init()
-    template_service = TemplateService(audit_service=audit_service)
-    await template_service.init()
-    query_service = QueryService()
-    await query_service.init()
-    stats_service = StatsService()
-    await stats_service.init()
-    io_service = IOService(audit_service=audit_service)
-    await io_service.init()
-    backup_service = BackupService(
-        bot=bot,
-        db_path=Path(os.getenv("CHAT_DB_PATH", DB_PATH)),
-        bucket_name=os.getenv("S3_BACKUP_BUCKET", ""),
-        backup_prefix=os.getenv("S3_BACKUP_PREFIX", "sprint-bot/backups/"),
-        interval=_backup_interval_from_env(),
-        admin_chat_ids=admin_chat_ids,
-        storage_class=os.getenv("S3_STORAGE_CLASS") or None,
-        endpoint_url=os.getenv("S3_ENDPOINT_URL") or None,
-    )
-    dp = setup_dispatcher(notification_service, backup_service, turn_service)
-    dp.update.middleware(RoleMiddleware(role_service))
+    queue_task: asyncio.Task[None] | None = None
     try:
-        await configure_bot_commands(bot)
-    except TelegramRetryAfter:
-        pass
-    queue_task = asyncio.create_task(drain_queue(), name="notification-queue-drain")
-    try:
-        await _start_polling_with_retries(
-            dp,
-            bot,
-            notifications=notification_service,
-            chat_service=chat_service,
-            backup_service=backup_service,
-            role_service=role_service,
-            user_service=user_service,
-            template_service=template_service,
-            query_service=query_service,
-            stats_service=stats_service,
-            io_service=io_service,
-            audit_service=audit_service,
-            turn_service=turn_service,
+        turn_service = TurnService()
+        notification_service = NotificationService(bot=bot)
+        chat_service = ChatService()
+        await chat_service.init()
+        admin_chat_ids = _parse_admin_chat_ids(ADMIN_IDS)
+        role_service = RoleService()
+        await role_service.init(admin_ids=admin_chat_ids)
+        user_service = UserService()
+        await user_service.init()
+        audit_service = AuditService()
+        await audit_service.init()
+        template_service = TemplateService(audit_service=audit_service)
+        await template_service.init()
+        query_service = QueryService()
+        await query_service.init()
+        stats_service = StatsService()
+        await stats_service.init()
+        io_service = IOService(audit_service=audit_service)
+        await io_service.init()
+        backup_service = BackupService(
+            bot=bot,
+            db_path=Path(os.getenv("CHAT_DB_PATH", DB_PATH)),
+            bucket_name=os.getenv("S3_BACKUP_BUCKET", ""),
+            backup_prefix=os.getenv("S3_BACKUP_PREFIX", "sprint-bot/backups/"),
+            interval=_backup_interval_from_env(),
+            admin_chat_ids=admin_chat_ids,
+            storage_class=os.getenv("S3_STORAGE_CLASS") or None,
+            endpoint_url=os.getenv("S3_ENDPOINT_URL") or None,
         )
+        dp = setup_dispatcher(notification_service, backup_service, turn_service)
+        dp.update.middleware(RoleMiddleware(role_service))
+        try:
+            await configure_bot_commands(bot)
+        except TelegramRetryAfter:
+            pass
+        queue_task = asyncio.create_task(drain_queue(), name="notification-queue-drain")
+        try:
+            await _start_polling_with_retries(
+                dp,
+                bot,
+                notifications=notification_service,
+                chat_service=chat_service,
+                backup_service=backup_service,
+                role_service=role_service,
+                user_service=user_service,
+                template_service=template_service,
+                query_service=query_service,
+                stats_service=stats_service,
+                io_service=io_service,
+                audit_service=audit_service,
+                turn_service=turn_service,
+            )
+        finally:
+            if queue_task is not None:
+                queue_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await queue_task
     finally:
-        queue_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await queue_task
         with suppress(Exception):
             await bot.close()
+        with suppress(Exception):
             await bot.session.close()
 
 
+def run() -> None:
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("[SprintBot] shutdown requested via keyboard interrupt")
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    run()
