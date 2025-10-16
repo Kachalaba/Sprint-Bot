@@ -374,7 +374,9 @@ async def admin_export_command(
     )
 
 
-@router.message(Command(("admin_test", "test_athlete")), require_roles(ROLE_ADMIN))
+@router.message(
+    Command(commands=["admin_test", "test_athlete"]), require_roles(ROLE_ADMIN)
+)
 async def admin_test_command(
     message: types.Message,
     role_service: RoleService,
