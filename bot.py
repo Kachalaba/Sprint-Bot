@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable
 from aiogram import BaseMiddleware, Bot, Dispatcher
 from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter
 from aiogram.types import BotCommand, Message, TelegramObject
+from aiohttp import ClientTimeout
 from aiohttp import client_exceptions as aiohttp_exceptions
 
 from i18n import t
@@ -253,6 +254,31 @@ def setup_dispatcher(
     return dp
 
 
+def _resolve_timeout_seconds(timeout_obj: Any) -> float | None:
+    """Return timeout seconds from ``ClientTimeout`` or primitives."""
+
+    if timeout_obj is None:
+        return None
+    if isinstance(timeout_obj, (int, float)):
+        return float(timeout_obj) if timeout_obj > 0 else None
+    if isinstance(timeout_obj, ClientTimeout):
+        candidates = [
+            getattr(timeout_obj, "total", None),
+            getattr(timeout_obj, "total_timeout", None),
+            getattr(timeout_obj, "sock_read", None),
+            getattr(timeout_obj, "sock_connect", None),
+            getattr(timeout_obj, "connect", None),
+        ]
+        for candidate in candidates:
+            if isinstance(candidate, (int, float)) and candidate > 0:
+                return float(candidate)
+        return None
+    numeric_value = getattr(timeout_obj, "total", None)
+    if isinstance(numeric_value, (int, float)) and numeric_value > 0:
+        return float(numeric_value)
+    return None
+
+
 async def _start_polling_with_retries(
     dp: Dispatcher,
     bot_instance: Bot,
@@ -341,22 +367,29 @@ async def main() -> None:
         await configure_bot_commands(bot)
     except TelegramRetryAfter:
         pass
+    polling_kwargs: Dict[str, Any] = {
+        "notifications": notification_service,
+        "chat_service": chat_service,
+        "backup_service": backup_service,
+        "role_service": role_service,
+        "user_service": user_service,
+        "template_service": template_service,
+        "query_service": query_service,
+        "stats_service": stats_service,
+        "io_service": io_service,
+        "audit_service": audit_service,
+        "turn_service": turn_service,
+    }
+    timeout_seconds = _resolve_timeout_seconds(getattr(bot.session, "timeout", None))
+    if timeout_seconds is not None:
+        polling_kwargs["polling_timeout"] = timeout_seconds
+        polling_kwargs["request_timeout"] = timeout_seconds
     queue_task = asyncio.create_task(drain_queue(), name="notification-queue-drain")
     try:
         await _start_polling_with_retries(
             dp,
             bot,
-            notifications=notification_service,
-            chat_service=chat_service,
-            backup_service=backup_service,
-            role_service=role_service,
-            user_service=user_service,
-            template_service=template_service,
-            query_service=query_service,
-            stats_service=stats_service,
-            io_service=io_service,
-            audit_service=audit_service,
-            turn_service=turn_service,
+            **polling_kwargs,
         )
     finally:
         queue_task.cancel()
@@ -364,6 +397,7 @@ async def main() -> None:
             await queue_task
         with suppress(Exception):
             await bot.close()
+        with suppress(Exception):
             await bot.session.close()
 
 
