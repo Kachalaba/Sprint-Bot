@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional, cast
@@ -13,6 +12,8 @@ from aiogram import Bot
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiohttp import ClientTimeout
 from dotenv import load_dotenv
+
+from sprint_bot.config import get_settings
 
 # --- Environment setup ---
 load_dotenv()
@@ -27,17 +28,13 @@ _TELEGRAM_TIMEOUT = ClientTimeout(total=30.0, connect=5.0, sock_read=30.0)
 def get_bot() -> Bot:
     """Return a cached aiogram Bot instance configured for the project."""
 
-    token = os.getenv("BOT_TOKEN", "").strip()
-    if not token:
-        raise RuntimeError(
-            "BOT_TOKEN environment variable must be set and non-empty to create the bot."
-        )
+    token = get_settings().require_bot_token()
     session = AiohttpSession(timeout=_TELEGRAM_TIMEOUT)
     return Bot(token=token, parse_mode="HTML", session=session)
 
 
 def _get_credentials_path() -> Path:
-    return Path("creds.json")
+    return get_settings().google_credentials_path
 
 
 @lru_cache(maxsize=1)
@@ -62,12 +59,7 @@ def _get_gspread_client() -> gspread.Client:
 def _get_spreadsheet_key() -> str:
     """Return validated spreadsheet key from environment."""
 
-    key = os.getenv("SPREADSHEET_KEY", "").strip()
-    if not key:
-        raise RuntimeError(
-            "SPREADSHEET_KEY environment variable must be set to access Google Sheets."
-        )
-    return key
+    return get_settings().require_spreadsheet_key()
 
 
 @lru_cache(maxsize=1)
@@ -136,7 +128,9 @@ def get_athletes_worksheet() -> gspread.Worksheet:
 
 
 # --- Constants and Helpers ---
-ADMIN_IDS = (os.getenv("ADMIN_IDS") or "").split(",")
+# Legacy string representation kept for external consumers that still read
+# ``services.ADMIN_IDS``. Prefer ``get_settings().admin_ids`` for new code.
+ADMIN_IDS = [str(chat_id) for chat_id in get_settings().admin_ids]
 
 
 @lru_cache(maxsize=1)

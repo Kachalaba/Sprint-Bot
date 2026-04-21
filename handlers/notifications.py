@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from datetime import datetime
 from time import perf_counter
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -10,10 +9,8 @@ from aiogram.filters import Command
 
 from i18n import t
 from notifications import QUIET_HOURS_WINDOW, NotificationService, is_quiet_now
+from sprint_bot.config import get_settings
 from utils.logger import get_logger
-
-_DEFAULT_TIMEZONE = "Europe/Kyiv"
-_TIMEZONE_ENV_VAR = "QUIET_HOURS_TZ"
 
 router = Router()
 logger = get_logger(__name__)
@@ -85,7 +82,7 @@ async def disable_notifications(
 
 
 def _resolve_timezone() -> tuple[str, ZoneInfo]:
-    tz_name = os.getenv(_TIMEZONE_ENV_VAR, _DEFAULT_TIMEZONE)
+    tz_name = get_settings().quiet_hours_tz
     try:
         return tz_name, ZoneInfo(tz_name)
     except ZoneInfoNotFoundError:
