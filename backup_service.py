@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import shutil
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -14,6 +13,7 @@ from typing import Any, Callable, Sequence
 from aiogram import Bot
 
 from notifications import send_notification
+from sprint_bot.config import get_settings
 
 try:  # pragma: no cover - optional dependency
     import boto3
@@ -81,7 +81,7 @@ class BackupService:
         self.interval = interval
         self.admin_chat_ids = tuple(admin_chat_ids or ())
         self.storage_class = storage_class
-        self.endpoint_url = endpoint_url or os.getenv("S3_ENDPOINT_URL")
+        self.endpoint_url = endpoint_url or get_settings().s3_endpoint_url
         self._client: BaseClient | None = None
         self._client_factory = client_factory
         self._task: asyncio.Task | None = None

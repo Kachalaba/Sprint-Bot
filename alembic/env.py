@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from logging.config import fileConfig
 
 from alembic import context
@@ -12,6 +11,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from infra.db.models import Base
+from sprint_bot.config import get_settings
 
 config = context.config
 
@@ -24,7 +24,7 @@ target_metadata = Base.metadata
 def _get_url() -> str:
     """Resolve database URL from environment or Alembic config."""
 
-    return os.getenv("DB_URL") or config.get_main_option("sqlalchemy.url")
+    return get_settings().db_url or config.get_main_option("sqlalchemy.url")
 
 
 def run_migrations_offline() -> None:

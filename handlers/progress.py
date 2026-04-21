@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
-import os
 from collections import OrderedDict, defaultdict
 from datetime import datetime
 from typing import Iterable, Sequence
@@ -17,6 +16,7 @@ from keyboards import build_analysis_keyboard
 from role_service import ROLE_ADMIN, ROLE_ATHLETE, ROLE_TRAINER, RoleService
 from services import get_athletes_worksheet, get_results_worksheet
 from services.stats_service import StatsPeriod, StatsService, TurnProgressResult
+from sprint_bot.config import get_settings
 from utils import fmt_time
 
 matplotlib.use("Agg")
@@ -55,9 +55,7 @@ _STROKE_TITLES = {
     "butterfly": "Баттерфляй",
 }
 
-_DEFAULT_TURN_STROKE = (
-    os.getenv("TURN_ANALYSIS_DEFAULT_STROKE", "breaststroke").strip().lower()
-)
+_DEFAULT_TURN_STROKE = get_settings().turn_analysis_default_stroke.strip().lower()
 if _DEFAULT_TURN_STROKE not in _SUPPORTED_TURN_STROKES:
     _DEFAULT_TURN_STROKE = "breaststroke"
 

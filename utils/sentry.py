@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any, Final
 
 try:  # pragma: no cover - exercised implicitly in environments without sentry_sdk
@@ -10,10 +9,11 @@ try:  # pragma: no cover - exercised implicitly in environments without sentry_s
 except ModuleNotFoundError:  # pragma: no cover - sentry optional in tests
     sentry_sdk = None  # type: ignore[assignment]
 
+from sprint_bot.config import get_settings
 from utils.meta import BOT_VERSION
 from utils.personal_data import mask_identifier, scrub_sensitive_mapping
 
-ENVIRONMENT: Final[str] = os.getenv("ENV", "development")
+ENVIRONMENT: Final[str] = get_settings().env
 """Deployment environment name used for Sentry tagging."""
 
 _RELEASE: Final[str] = f"sprint-bot@{BOT_VERSION}"
@@ -68,7 +68,7 @@ def init_sentry() -> bool:
     if sentry_sdk is None:
         return False
 
-    dsn = os.getenv("SENTRY_DSN")
+    dsn = get_settings().sentry_dsn
     if not dsn:
         return False
 

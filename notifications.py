@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import os
 from asyncio import QueueEmpty
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
@@ -13,6 +12,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from aiogram import Bot
 
 from i18n import t
+from sprint_bot.config import get_settings
 from sprint_bot.domain.analytics import avg_speed
 from utils import fmt_time
 from utils.logger import get_logger
@@ -38,54 +38,29 @@ _TRAINER_THROTTLE_SECONDS = 20.0
 _TRAINER_DUPLICATE_TTL = 600.0
 
 
-def _parse_quiet_hours(value: str) -> tuple[time, time]:
-    parts = [chunk.strip() for chunk in value.split("-", 1)]
-    if len(parts) != 2:
-        raise ValueError("Expected format HH:MM-HH:MM")
-    start_raw, end_raw = parts
-    if not start_raw or not end_raw:
-        raise ValueError("Both start and end must be provided")
-    start_time = time.fromisoformat(start_raw)
-    end_time = time.fromisoformat(end_raw)
-    return start_time, end_time
-
-
-def _load_quiet_hours_from_env() -> tuple[time, time] | None:
-    value = os.getenv("QUIET_HOURS")
-    if not value:
-        return None
-    try:
-        return _parse_quiet_hours(value)
-    except ValueError:
-        logger.warning("Invalid QUIET_HOURS value provided: %s", value)
-        return None
-
-
-def _queue_interval_from_env(default: float = _DEFAULT_QUEUE_INTERVAL) -> float:
-    raw_value = os.getenv("QUIET_QUEUE_INTERVAL")
-    if not raw_value:
-        return default
-    try:
-        seconds = float(raw_value)
-    except ValueError:
+def _load_quiet_hours_from_settings() -> tuple[time, time] | None:
+    window = get_settings().quiet_hours_window
+    if window is None and get_settings().quiet_hours:
         logger.warning(
-            "Invalid QUIET_QUEUE_INTERVAL=%s provided, using default %s",
-            raw_value,
-            default,
+            "Invalid QUIET_HOURS value provided: %s", get_settings().quiet_hours
         )
-        return default
-    if seconds <= 0:
+    return window
+
+
+def _queue_interval_from_settings(default: float = _DEFAULT_QUEUE_INTERVAL) -> float:
+    value = get_settings().quiet_queue_interval
+    if value <= 0:
         logger.warning(
             "Non-positive QUIET_QUEUE_INTERVAL=%s provided, using default %s",
-            seconds,
+            value,
             default,
         )
         return default
-    return seconds
+    return value
 
 
-QUIET_HOURS_WINDOW = _load_quiet_hours_from_env()
-QUEUE_CHECK_INTERVAL = _queue_interval_from_env()
+QUIET_HOURS_WINDOW = _load_quiet_hours_from_settings()
+QUEUE_CHECK_INTERVAL = _queue_interval_from_settings()
 NOTIFICATION_QUEUE: asyncio.Queue[QueuedNotification] = asyncio.Queue()
 
 WEEKDAY_TRANSLATION_KEYS: Sequence[str] = (
