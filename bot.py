@@ -1,96 +1,26 @@
+"""Sprint Bot entry point — delegates wiring to ``sprint_bot.app``."""
+
 from __future__ import annotations
 
 import asyncio
-import os
-from contextlib import suppress
-from datetime import timedelta
-from pathlib import Path
-from time import perf_counter
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, Iterable
+from typing import Any, Iterable
 
-from aiogram import BaseMiddleware, Bot, Dispatcher
-from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter
-from aiogram.types import BotCommand, Message, TelegramObject
+from aiogram import Bot
+from aiogram.exceptions import TelegramRetryAfter
+from aiogram.types import BotCommand
 from aiohttp import ClientTimeout
-from aiohttp import client_exceptions as aiohttp_exceptions
 
 from i18n import t
-from notifications import drain_queue
 from utils.logger import get_logger
 from utils.sentry import init_sentry
 
-if TYPE_CHECKING:
-    from backup_service import BackupService
-    from notifications import NotificationService
-    from services.turn_service import TurnService
-
-ClientConnectorError = aiohttp_exceptions.ClientConnectorError
-ServerDisconnectedError = aiohttp_exceptions.ServerDisconnectedError
-RequestTimeoutError = getattr(
-    aiohttp_exceptions,
-    "RequestTimeoutError",
-    getattr(
-        aiohttp_exceptions,
-        "ServerTimeoutError",
-        asyncio.TimeoutError,
-    ),
-)
-
 logger = get_logger(__name__)
-
-_POLLING_INITIAL_BACKOFF = 1.0
-_POLLING_MAX_BACKOFF = 60.0
-_POLLING_MAX_TRIES_BEFORE_WARNING = 10
-_POLLING_WARNING_SLEEP = 300.0
-
-_NETWORK_ERRORS = (
-    TelegramNetworkError,
-    ServerDisconnectedError,
-    RequestTimeoutError,
-    ClientConnectorError,
-)
 
 _SENTRY_ENABLED = init_sentry()
 if _SENTRY_ENABLED:
     logger.info("Sentry successfully initialised")
 else:
     logger.info("Sentry DSN not provided; Sentry disabled")
-
-
-Handler = Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]]
-
-
-class CommandLoggingMiddleware(BaseMiddleware):
-    """Emit structured logs around command handler execution."""
-
-    def __init__(self, logger_instance):
-        self._logger = logger_instance
-
-    async def __call__(
-        self, handler: Handler, event: TelegramObject, data: Dict[str, Any]
-    ) -> Any:
-        if isinstance(event, Message) and event.text and event.text.startswith("/"):
-            user = event.from_user
-            user_id = user.id if user else None
-            cmd = event.text.split()[0]
-            start = perf_counter()
-            self._logger.info(
-                "command_start",
-                extra={"user_id": user_id, "cmd": cmd, "latency_ms": None},
-            )
-            try:
-                return await handler(event, data)
-            finally:
-                latency_ms = (perf_counter() - start) * 1000
-                self._logger.info(
-                    "command_complete",
-                    extra={
-                        "user_id": user_id,
-                        "cmd": cmd,
-                        "latency_ms": round(latency_ms, 2),
-                    },
-                )
-        return await handler(event, data)
 
 
 SUPPORTED_LANGUAGES: tuple[str, ...] = ("uk", "ru")
@@ -158,102 +88,6 @@ async def configure_bot_commands(bot_instance: Bot) -> None:
         )
 
 
-def _parse_admin_chat_ids(admin_ids_source: Iterable[str]) -> tuple[int, ...]:
-    ids: list[int] = []
-    for raw_id in admin_ids_source:
-        raw_id = raw_id.strip()
-        if not raw_id:
-            continue
-        try:
-            ids.append(int(raw_id))
-        except ValueError:
-            logger.warning("Invalid ADMIN_IDS entry skipped: %s", raw_id)
-    return tuple(ids)
-
-
-def _backup_interval_from_env(default_hours: float = 6.0) -> timedelta:
-    value = os.getenv("BACKUP_INTERVAL_HOURS")
-    if not value:
-        return timedelta(hours=default_hours)
-    try:
-        hours = float(value)
-    except ValueError:
-        logger.warning("Invalid BACKUP_INTERVAL_HOURS=%s, using default", value)
-        return timedelta(hours=default_hours)
-    if hours <= 0:
-        logger.warning(
-            "Non-positive BACKUP_INTERVAL_HOURS=%s provided, using default", hours
-        )
-        return timedelta(hours=default_hours)
-    return timedelta(hours=hours)
-
-
-def setup_dispatcher(
-    notification_service: "NotificationService",
-    backup_service: "BackupService",
-    turn_service: "TurnService",
-) -> Dispatcher:
-    """Configure dispatcher with routers."""
-    from handlers.add_wizard import router as add_wizard_router
-    from handlers.admin import router as admin_router
-    from handlers.admin_browser import router as admin_browser_router
-    from handlers.admin_history import router as admin_history_router
-    from handlers.backup import router as backup_router
-    from handlers.common import router as common_router
-    from handlers.compare import router as compare_router
-    from handlers.error_handler import router as error_router
-    from handlers.export_analysis import router as export_analysis_router
-    from handlers.export_import import router as export_import_router
-    from handlers.export_reports import router as export_reports_router
-    from handlers.leaderboard import router as leaderboard_router
-    from handlers.menu import router as menu_router
-    from handlers.messages import router as messages_router
-    from handlers.notifications import router as notifications_router
-    from handlers.onboarding import router as onboarding_router
-    from handlers.progress import router as progress_router
-    from handlers.registration import router as registration_router
-    from handlers.reports import router as reports_router
-    from handlers.results import router as results_router
-    from handlers.search import router as search_router
-    from handlers.sprint_actions import router as sprint_router
-    from handlers.templates import router as templates_router
-
-    dp = Dispatcher()
-    dp.update.middleware(CommandLoggingMiddleware(logger))
-    try:
-        dp.workflow_data.update(turn_service=turn_service)
-    except AttributeError:
-        dp.workflow_data = {"turn_service": turn_service}
-    dp.include_router(registration_router)
-    dp.include_router(onboarding_router)
-    dp.include_router(menu_router)
-    dp.include_router(common_router)
-    dp.include_router(add_wizard_router)
-    dp.include_router(admin_router)
-    dp.include_router(admin_browser_router)
-    dp.include_router(admin_history_router)
-    dp.include_router(progress_router)
-    dp.include_router(compare_router)
-    dp.include_router(leaderboard_router)
-    dp.include_router(reports_router)
-    dp.include_router(export_import_router)
-    dp.include_router(export_reports_router)
-    dp.include_router(export_analysis_router)
-    dp.include_router(search_router)
-    dp.include_router(results_router)
-    dp.include_router(sprint_router)
-    dp.include_router(templates_router)
-    dp.include_router(messages_router)
-    dp.include_router(notifications_router)
-    dp.include_router(backup_router)
-    dp.include_router(error_router)
-    dp.startup.register(notification_service.startup)
-    dp.startup.register(backup_service.startup)
-    dp.shutdown.register(notification_service.shutdown)
-    dp.shutdown.register(backup_service.shutdown)
-    return dp
-
-
 def _resolve_timeout_seconds(timeout_obj: Any) -> float | None:
     """Return timeout seconds from ``ClientTimeout`` or primitives."""
 
@@ -279,126 +113,12 @@ def _resolve_timeout_seconds(timeout_obj: Any) -> float | None:
     return None
 
 
-async def _start_polling_with_retries(
-    dp: Dispatcher,
-    bot_instance: Bot,
-    **polling_kwargs: Any,
-) -> None:
-    attempt = 0
-    while True:
-        try:
-            await dp.start_polling(bot_instance, **polling_kwargs)
-            break
-        except asyncio.CancelledError:
-            raise
-        except _NETWORK_ERRORS:
-            attempt += 1
-            effective_attempt = min(attempt, _POLLING_MAX_TRIES_BEFORE_WARNING)
-            backoff_delay = min(
-                _POLLING_MAX_BACKOFF,
-                _POLLING_INITIAL_BACKOFF * 2 ** (effective_attempt - 1),
-            )
-            logger.exception(
-                "[SprintBot] polling interrupted by network error (attempt %s)",
-                attempt,
-            )
-            if attempt > _POLLING_MAX_TRIES_BEFORE_WARNING:
-                cooldown = min(_POLLING_WARNING_SLEEP, backoff_delay * 2)
-                logger.warning(
-                    "[SprintBot] exceeded %s polling retries; "
-                    "next attempt in %s seconds",
-                    _POLLING_MAX_TRIES_BEFORE_WARNING,
-                    cooldown,
-                )
-                await asyncio.sleep(cooldown)
-            else:
-                await asyncio.sleep(backoff_delay)
-
-
 async def main() -> None:
-    """Start Sprint Bot."""
-    logger.info("[SprintBot] starting…")
-    from backup_service import BackupService
-    from chat_service import DB_PATH, ChatService
-    from middlewares.roles import RoleMiddleware
-    from notifications import NotificationService
-    from role_service import RoleService
-    from services import ADMIN_IDS, TurnService, get_bot
-    from services.audit_service import AuditService
-    from services.io_service import IOService
-    from services.query_service import QueryService
-    from services.stats_service import StatsService
-    from services.user_service import UserService
-    from template_service import TemplateService
+    """Start Sprint Bot via the application composition root."""
 
-    bot = get_bot()
-    turn_service = TurnService()
-    notification_service = NotificationService(bot=bot)
-    chat_service = ChatService()
-    await chat_service.init()
-    admin_chat_ids = _parse_admin_chat_ids(ADMIN_IDS)
-    role_service = RoleService()
-    await role_service.init(admin_ids=admin_chat_ids)
-    user_service = UserService()
-    await user_service.init()
-    audit_service = AuditService()
-    await audit_service.init()
-    template_service = TemplateService(audit_service=audit_service)
-    await template_service.init()
-    query_service = QueryService()
-    await query_service.init()
-    stats_service = StatsService()
-    await stats_service.init()
-    io_service = IOService(audit_service=audit_service)
-    await io_service.init()
-    backup_service = BackupService(
-        bot=bot,
-        db_path=Path(os.getenv("CHAT_DB_PATH", DB_PATH)),
-        bucket_name=os.getenv("S3_BACKUP_BUCKET", ""),
-        backup_prefix=os.getenv("S3_BACKUP_PREFIX", "sprint-bot/backups/"),
-        interval=_backup_interval_from_env(),
-        admin_chat_ids=admin_chat_ids,
-        storage_class=os.getenv("S3_STORAGE_CLASS") or None,
-        endpoint_url=os.getenv("S3_ENDPOINT_URL") or None,
-    )
-    dp = setup_dispatcher(notification_service, backup_service, turn_service)
-    dp.update.middleware(RoleMiddleware(role_service))
-    try:
-        await configure_bot_commands(bot)
-    except TelegramRetryAfter:
-        pass
-    polling_kwargs: Dict[str, Any] = {
-        "notifications": notification_service,
-        "chat_service": chat_service,
-        "backup_service": backup_service,
-        "role_service": role_service,
-        "user_service": user_service,
-        "template_service": template_service,
-        "query_service": query_service,
-        "stats_service": stats_service,
-        "io_service": io_service,
-        "audit_service": audit_service,
-        "turn_service": turn_service,
-    }
-    timeout_seconds = _resolve_timeout_seconds(getattr(bot.session, "timeout", None))
-    if timeout_seconds is not None:
-        polling_kwargs["polling_timeout"] = timeout_seconds
-        polling_kwargs["request_timeout"] = timeout_seconds
-    queue_task = asyncio.create_task(drain_queue(), name="notification-queue-drain")
-    try:
-        await _start_polling_with_retries(
-            dp,
-            bot,
-            **polling_kwargs,
-        )
-    finally:
-        queue_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await queue_task
-        with suppress(Exception):
-            await bot.close()
-        with suppress(Exception):
-            await bot.session.close()
+    from sprint_bot.app import run
+
+    await run()
 
 
 if __name__ == "__main__":
