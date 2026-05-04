@@ -536,3 +536,9 @@ audit:
   undo_done: "✅ Операцию #{op_id} отменили."
   btn:
     undo: "↩️ Откатить"
+presenter:
+  progress:
+    empty: "На этой неделе ещё нет попыток."
+    header: "📊 Неделя: {attempts} попыток, {pr_count} PR"
+    highlight: "• {stroke} {distance}м — {time} {pr_badge} ({timestamp})"
+    pr_badge: "🏅"

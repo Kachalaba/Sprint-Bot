@@ -61,11 +61,33 @@ from utils.parse_time import parse_splits, parse_total, validate_splits
 
 from .add_result import build_quick_prompt, build_quick_saved
 
+from services.last_results_cache import LastResultsCache
+
 router = Router()
 
 
-# (coach_id, athlete_id) -> stored data for quick repeat
-LAST_RESULTS: dict[tuple[int, int], dict[str, Any]] = {}
+# Bounded TTL cache: (coach_id, athlete_id) -> stored data for quick repeat.
+# Replaces a previous unbounded module-level dict that leaked memory in
+# long-lived processes.
+_last_results = LastResultsCache()
+
+
+class _LastResultsLegacyView(dict):
+    """Backwards-compatible mapping facade used by tests that may still
+    monkey-patch ``LAST_RESULTS`` directly. Mutating this object syncs to
+    the underlying ``LastResultsCache`` so handlers see consistent state.
+    """
+
+    def __setitem__(self, key, value):  # type: ignore[override]
+        super().__setitem__(key, value)
+        _last_results.set(key, value)
+
+    def __delitem__(self, key):  # type: ignore[override]
+        super().__delitem__(key)
+        _last_results.discard(key)
+
+
+LAST_RESULTS: dict[tuple[int, int], dict[str, Any]] = _LastResultsLegacyView()
 
 COMMENT_COLUMN_INDEX = 8
 
@@ -133,6 +155,7 @@ def _update_comment(athlete_id: int, timestamp: str, comment: str | None) -> Non
 def _sync_last_results(timestamp: str, comment: str) -> None:
     """Update cached last results with a new comment value."""
 
+    _last_results.update_comment_by_timestamp(timestamp, comment)
     for payload in LAST_RESULTS.values():
         if payload.get("timestamp") == timestamp:
             payload["comment"] = comment
@@ -484,7 +507,7 @@ async def _finalize_result_entry(
         new_prs=new_prs,
     )
 
-    LAST_RESULTS[(actor.id, athlete_id)] = {
+    payload = {
         "athlete_id": athlete_id,
         "athlete_name": actor.full_name,
         "stroke": stroke,
@@ -494,6 +517,9 @@ async def _finalize_result_entry(
         "timestamp": timestamp,
         "comment": comment_clean,
     }
+    cache_key = (actor.id, athlete_id)
+    _last_results.set(cache_key, payload)
+    LAST_RESULTS[cache_key] = payload
 
 
 @router.callback_query(F.data == "add")
@@ -716,7 +742,7 @@ async def repeat_previous(
     """Duplicate the previously saved result for faster logging."""
 
     key = (cb.from_user.id, callback_data.athlete_id)
-    payload = LAST_RESULTS.get(key)
+    payload = _last_results.get(key) or LAST_RESULTS.get(key)
     if not payload:
         await cb.answer("Немає результату для повтору", show_alert=True)
         return
