@@ -16,6 +16,7 @@ from aiohttp import client_exceptions as aiohttp_exceptions
 
 from i18n import t
 from notifications import drain_queue
+from utils.heartbeat import heartbeat_loop
 from utils.logger import get_logger
 from utils.sentry import init_sentry
 
@@ -385,6 +386,7 @@ async def main() -> None:
         polling_kwargs["polling_timeout"] = timeout_seconds
         polling_kwargs["request_timeout"] = timeout_seconds
     queue_task = asyncio.create_task(drain_queue(), name="notification-queue-drain")
+    heartbeat_task = asyncio.create_task(heartbeat_loop(), name="container-heartbeat")
     try:
         await _start_polling_with_retries(
             dp,
@@ -392,9 +394,11 @@ async def main() -> None:
             **polling_kwargs,
         )
     finally:
-        queue_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await queue_task
+        for task in (queue_task, heartbeat_task):
+            task.cancel()
+        for task in (queue_task, heartbeat_task):
+            with suppress(asyncio.CancelledError):
+                await task
         with suppress(Exception):
             await bot.close()
         with suppress(Exception):

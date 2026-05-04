@@ -1,22 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ ! -f .env ]; then
-  if [ -f .env.example ]; then
-    cp .env.example .env
-  else
-    echo "Error: .env.example not found" >&2
-    exit 1
-  fi
+# Optional .env file support: only load if it exists. In container deployments
+# secrets must be provided via env vars or env_file (compose / k8s); we never
+# fall back to .env.example because example credentials must not reach prod.
+if [ -f .env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env
+  set +a
 fi
 
-set -a
-. ./.env
-set +a
-
 if [ -z "${BOT_TOKEN:-}" ]; then
-  echo "Error: BOT_TOKEN not set"
+  echo "Error: BOT_TOKEN is not set" >&2
   exit 1
 fi
 
-python bot.py
+exec python bot.py
