@@ -218,7 +218,10 @@ def setup_dispatcher(
     from handlers.sprint_actions import router as sprint_router
     from handlers.templates import router as templates_router
 
+    from middlewares.throttling import ThrottlingMiddleware
+
     dp = Dispatcher()
+    dp.update.middleware(ThrottlingMiddleware())
     dp.update.middleware(CommandLoggingMiddleware(logger))
     try:
         dp.workflow_data.update(turn_service=turn_service)
